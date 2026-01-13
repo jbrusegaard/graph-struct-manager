@@ -48,6 +48,53 @@ type TestVertex struct {
 }
 ```
 
+### Using omitempty
+
+The `omitempty` option can be added to gremlin tags to skip fields with zero values when creating or updating vertices. This is similar to how JSON's `omitempty` works.
+
+**Syntax:**
+```go
+type User struct {
+    types.Vertex
+    Name        string  `gremlin:"name"`                    // Always included
+    Email       string  `gremlin:"email,omitempty"`         // Omit if empty string
+    Age         int     `gremlin:"age,omitempty"`           // Omit if zero
+    IsActive    bool    `gremlin:"is_active,omitempty"`     // Omit if false
+    Tags        []string `gremlin:"tags,omitempty"`         // Omit if empty slice
+    Metadata    *string  `gremlin:"metadata,omitempty"`     // Omit if nil
+}
+```
+
+**When a field is omitted:**
+- Empty strings (`""`)
+- Zero numbers (`0`, `0.0`)
+- False booleans (`false`)
+- Nil pointers
+- Empty slices, arrays, and maps
+- Any type with a zero value
+
+**When to use omitempty:**
+- Optional fields that should not create properties in the graph when empty
+- Reducing graph storage by not storing empty/default values
+- When you want to distinguish between "not set" and "set to zero value"
+- Fields that are populated conditionally
+
+**Example:**
+```go
+// Create user with only non-empty fields
+newUser := User{
+    Name:  "John Doe",
+    Email: "john@example.com",
+    // Age is 0 (zero value) - will be omitted if has omitempty
+    // IsActive is false (zero value) - will be omitted if has omitempty
+    // Tags is nil - will be omitted if has omitempty
+}
+
+err := GSM.Create(db, &newUser)
+// Only "name" and "email" properties will be created in the graph
+// (assuming other fields have omitempty)
+```
+
 ### Custom Labels
 
 You can provide a custom label for your vertex by implementing the `Label()` method on your struct. This is useful when you need a specific label that differs from the normalized struct name, or when you want more control over the label format.

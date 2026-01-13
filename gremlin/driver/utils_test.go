@@ -19,6 +19,7 @@ type testVertexForUtils struct {
 	Sort              int               `json:"sort"     gremlin:"sort"`
 	SubTraversalTest  string            `json:"testConstant" gremlinSubTraversal:"subTraversalTest"`
 	SubTraversalTest2 int               `json:"testConstant2" gremlinSubTraversal:"subTraversalTest2"`
+	OmitEmptyTest     string            `json:"omitEmptyTest" gremlin:"omitEmptyTest,omitempty"`
 }
 
 type testVertexWithNumSlice struct {
@@ -326,6 +327,24 @@ func TestUtils(t *testing.T) {
 			}
 			if !slices.Contains(test.ListTest, "1") {
 				t.Errorf("ListTest not found in struct")
+			}
+		},
+	)
+	t.Run(
+		"TestStructToMapWithOmitEmpty", func(t *testing.T) {
+			t.Parallel()
+			v := testVertexForUtils{
+				Name: "test",
+			}
+			_, mapValue, err := structToMap(v)
+			if err != nil {
+				t.Errorf("Error getting struct to map: %v", err)
+			}
+			if mapValue["name"] != "test" {
+				t.Errorf("Map value name should be test, got %s", mapValue["name"])
+			}
+			if _, ok := mapValue["omitEmptyTest"]; ok {
+				t.Errorf("OmitEmptyTest should be omitted, got %s", mapValue["omitEmptyTest"])
 			}
 		},
 	)
