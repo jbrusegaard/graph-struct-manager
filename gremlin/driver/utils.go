@@ -149,7 +149,9 @@ func getLabelFromEdge(value gsmtypes.EdgeType) string {
 // the label is determined by calling Label() method if available, otherwise the name of the struct converted to snake case
 // the map is the map of the struct
 // the error is the error if any
-func structToMap(value any) (string, map[string]any, error) {
+func structToMap( //nolint:gocognit
+	value any,
+) (string, map[string]any, error) {
 	mapValue := make(map[string]any)
 	var err error
 
@@ -209,11 +211,31 @@ func structToMap(value any) (string, map[string]any, error) {
 			continue
 		}
 
+		// Parse tag options (e.g., "field_name,omitempty")
+		tagParts := parseGremlinTag(gremlinTag)
+		propertyName := tagParts.name
+		omitEmpty := tagParts.omitEmpty
+
+		// Check if field is a pointer and is nil (unset)
+		if fieldValue.Kind() == reflect.Ptr {
+			if fieldValue.IsNil() {
+				// Skip unset pointer fields
+				continue
+			}
+			// Dereference the pointer to get the actual value
+			fieldValue = fieldValue.Elem()
+		}
+
+		// If omitempty is set, skip zero values
+		if omitEmpty && fieldValue.IsZero() {
+			continue
+		}
+
 		// Get the field value
 		fieldInterface := fieldValue.Interface()
 
 		// Use the gremlin tag as the property name
-		mapValue[gremlinTag] = fieldInterface
+		mapValue[propertyName] = fieldInterface
 	}
 
 	return label, mapValue, nil
