@@ -213,8 +213,6 @@ func structToMap( //nolint:gocognit
 
 		// Parse tag options (e.g., "field_name,omitempty")
 		tagParts := parseGremlinTag(gremlinTag)
-		propertyName := tagParts.name
-		omitEmpty := tagParts.omitEmpty
 
 		// Check if field is a pointer and is nil (unset)
 		if fieldValue.Kind() == reflect.Ptr {
@@ -227,7 +225,7 @@ func structToMap( //nolint:gocognit
 		}
 
 		// If omitempty is set, skip zero values
-		if omitEmpty && fieldValue.IsZero() {
+		if tagParts.omitEmpty && fieldValue.IsZero() {
 			continue
 		}
 
@@ -235,7 +233,7 @@ func structToMap( //nolint:gocognit
 		fieldInterface := fieldValue.Interface()
 
 		// Use the gremlin tag as the property name
-		mapValue[propertyName] = fieldInterface
+		mapValue[tagParts.name] = fieldInterface
 	}
 
 	return label, mapValue, nil
