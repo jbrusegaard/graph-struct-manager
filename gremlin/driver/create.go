@@ -58,11 +58,15 @@ func createVertex[T gsmtypes.VertexType](db *GremlinDriver, value *T) error {
 	if err != nil {
 		return err
 	}
+	id, hasID := mapValue["id"]
 	delete(mapValue, "id")
 	mapValue[gsmtypes.LastModified] = now
 	mapValue[gsmtypes.CreatedAt] = now
 	query := db.g.AddV(label)
 	query = handlePropertyUpdate(db, mapValue, query)
+	if hasID && id != nil {
+		query = query.Property(gremlingo.T.Id, id)
+	}
 	vertexID, err := query.Id().Next()
 	if err != nil {
 		return err

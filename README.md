@@ -80,6 +80,43 @@ func (u User) Label() string {
 **Default behavior:**
 If you don't implement `Label()`, or if `Label()` returns an empty string, the system will automatically use the struct name normalized to snake_case (e.g., `MyCustomVertex` → `my_custom_vertex`). This ensures backward compatibility with existing code.
 
+### Custom IDs
+
+By default, the graph database automatically generates unique IDs for new vertices. However, you can provide a custom ID by setting the `ID` field in your struct before calling the `Create` function. This is useful when you need to maintain specific ID formats or integrate with existing systems.
+
+**Example with custom ID:**
+```go
+type User struct {
+    types.Vertex
+    Name  string `gremlin:"name"`
+    Email string `gremlin:"email"`
+}
+
+// Create user with custom ID
+newUser := User{
+    Name:  "John Doe",
+    Email: "john@example.com",
+}
+newUser.ID = "custom-user-123" // Set custom ID
+
+err := GSM.Create(db, &newUser)
+if err != nil {
+    log.Fatal(err)
+}
+// The vertex will be created with ID "custom-user-123"
+```
+
+**When to use custom IDs:**
+- When integrating with external systems that have their own ID schemes
+- When you need predictable or human-readable IDs
+- When migrating data from other databases and need to preserve original IDs
+- When implementing specific ID formats (e.g., UUIDs, prefixed IDs)
+
+**Important notes:**
+- If no ID is set, the database will automatically generate one
+- Custom IDs must be unique within the graph
+- The ID type can be string, int, or any type supported by your graph database
+
 Import the necessary packages and connect to your Gremlin database:
 
 ```go
