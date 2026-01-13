@@ -7,6 +7,8 @@ import (
 	"github.com/jbrusegaard/graph-struct-manager/comparator"
 )
 
+var dbDriver DatabaseDriver = Neptune
+
 func seedData(db *GremlinDriver, data []testVertexForUtils) error {
 	for _, d := range data {
 		err := Create(db, &d)
@@ -18,12 +20,12 @@ func seedData(db *GremlinDriver, data []testVertexForUtils) error {
 }
 
 func cleanDB() {
-	db, _ := Open(DbURL, Gremlin)
+	db, _ := Open(DbURL, dbDriver)
 	<-db.g.V().Drop().Iterate()
 }
 
 func TestQuery(t *testing.T) {
-	db, err := Open(DbURL, Gremlin)
+	db, err := Open(DbURL, dbDriver)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,6 +43,9 @@ func TestQuery(t *testing.T) {
 		{
 			Name: "third",
 			Sort: 3,
+			MapTest: map[string]string{
+				"test123": "test123",
+			},
 		},
 	}
 

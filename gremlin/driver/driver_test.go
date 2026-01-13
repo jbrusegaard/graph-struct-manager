@@ -37,7 +37,7 @@ func TestDriverConnections(t *testing.T) {
 		t.Run(
 			tt.name, func(t *testing.T) {
 				t.Parallel()
-				db, err := Open(tt.url, Gremlin)
+				db, err := Open(tt.url, dbDriver)
 				if (err != nil) != tt.wantErr {
 					t.Errorf("Open() error = %v, wantErr %v", err, tt.wantErr)
 					return
@@ -51,7 +51,7 @@ func TestDriverConnections(t *testing.T) {
 }
 
 func TestDriverTable(t *testing.T) {
-	db, err := Open(DbURL, Gremlin)
+	db, err := Open(DbURL, dbDriver)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +66,7 @@ func TestDriverTable(t *testing.T) {
 }
 
 func TestDriverModel(t *testing.T) {
-	db, err := Open(DbURL, Gremlin)
+	db, err := Open(DbURL, dbDriver)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +78,7 @@ func TestDriverModel(t *testing.T) {
 }
 
 func TestDriverWhere(t *testing.T) {
-	db, err := Open(DbURL, Gremlin)
+	db, err := Open(DbURL, dbDriver)
 	if err != nil {
 		t.Fatal(err)
 	}
