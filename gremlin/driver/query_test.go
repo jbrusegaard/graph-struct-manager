@@ -1,6 +1,8 @@
 package driver
 
 import (
+	"github.com/google/uuid"
+	"github.com/jbrusegaard/graph-struct-manager/gsmtypes"
 	"testing"
 
 	gremlingo "github.com/apache/tinkerpop/gremlin-go/v3/driver"
@@ -308,10 +310,12 @@ func TestQuery(t *testing.T) {
 			if err != nil {
 				t.Error(err)
 			}
-			model := Model[testVertexForUtils](db).AddSubTraversals(map[string]*gremlingo.GraphTraversal{
-				"subTraversalTest":  gremlingo.T__.Constant("test123"),
-				"subTraversalTest2": gremlingo.T__.Constant(123),
-			})
+			model := Model[testVertexForUtils](db).AddSubTraversals(
+				map[string]*gremlingo.GraphTraversal{
+					"subTraversalTest":  gremlingo.T__.Constant("test123"),
+					"subTraversalTest2": gremlingo.T__.Constant(123),
+				},
+			)
 			result, err := model.Take()
 			if err != nil {
 				t.Error(err)
@@ -321,6 +325,31 @@ func TestQuery(t *testing.T) {
 			}
 			if result.SubTraversalTest2 != 123 {
 				t.Errorf("Expected %d result, got %d", 123, result.SubTraversalTest2)
+			}
+		},
+	)
+	t.Run(
+		"TestCustomID", func(t *testing.T) {
+			t.Cleanup(cleanDB)
+
+			testID, err := uuid.NewRandom()
+			if err != nil {
+				t.Error(err)
+			}
+			data := testVertexForUtils{
+				Vertex: gsmtypes.Vertex{ID: testID.String()},
+				Name:   "test",
+			}
+			err = createVertex(db, &data)
+			if err != nil {
+				t.Error(err)
+			}
+			model, err := Model[testVertexForUtils](db).ID(testID.String())
+			if err != nil {
+				t.Error(err)
+			}
+			if model.ID != testID {
+				t.Errorf("Expected %s result, got %s", testID, model.ID)
 			}
 		},
 	)
