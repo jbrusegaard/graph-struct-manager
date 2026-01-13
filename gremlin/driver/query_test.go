@@ -7,7 +7,7 @@ import (
 	"github.com/jbrusegaard/graph-struct-manager/comparator"
 )
 
-var dbDriver DatabaseDriver = Neptune
+var dbDriver = Neptune
 
 func seedData(db *GremlinDriver, data []testVertexForUtils) error {
 	for _, d := range data {
