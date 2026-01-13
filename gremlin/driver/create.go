@@ -71,7 +71,13 @@ func createVertex[T gsmtypes.VertexType](db *GremlinDriver, value *T) error {
 	if err != nil {
 		return err
 	}
-	reflect.ValueOf(value).Elem().FieldByName("ID").Set(reflect.ValueOf(vertexID.GetInterface()))
+	// Check if ID was pre-set or if generated add it to struct
+	if !hasID {
+		reflect.ValueOf(value).
+			Elem().
+			FieldByName("ID").
+			Set(reflect.ValueOf(vertexID.GetInterface()))
+	}
 	reflectNow := reflect.ValueOf(now)
 	reflect.ValueOf(value).Elem().FieldByName("LastModified").Set(reflectNow)
 	reflect.ValueOf(value).Elem().FieldByName("CreatedAt").Set(reflectNow)
