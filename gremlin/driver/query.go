@@ -14,20 +14,27 @@ import (
 	"github.com/jbrusegaard/graph-struct-manager/gsmtypes"
 )
 
+type RangeCondition struct {
+	lower int
+	upper int
+}
+
 var cardinality = gremlingo.Cardinality
 
 // Query represents a chainable query builder
 type Query[T gsmtypes.VertexType] struct {
-	db            *GremlinDriver
-	conditions    []*QueryCondition
-	ids           []any
-	label         string
-	limit         *int
-	offset        *int
-	subTraversals map[string]*gremlingo.GraphTraversal
-	orderBy       *OrderCondition
-	dedup         bool
-	debugString   *strings.Builder
+	db             *GremlinDriver
+	conditions     []*QueryCondition
+	ids            []any
+	label          string
+	limit          *int
+	offset         *int
+	rangeCondition *RangeCondition
+	subTraversals  map[string]*gremlingo.GraphTraversal
+	orderBy        *OrderCondition
+	dedup          bool
+	debug          bool
+	debugString    *strings.Builder
 }
 
 type QueryCondition struct {
@@ -106,6 +113,7 @@ func NewQuery[T gsmtypes.VertexType](db *GremlinDriver) *Query[T] {
 		label:         label,
 		orderBy:       nil,
 		subTraversals: make(map[string]*gremlingo.GraphTraversal),
+		debug:         os.Getenv("GSM_DEBUG") == "true",
 	}
 }
 
@@ -191,6 +199,30 @@ func (q *Query[T]) Offset(offset int) *Query[T] {
 	q.writeDebugString(strconv.Itoa(offset))
 	q.writeDebugString(")")
 	q.offset = &offset
+	return q
+}
+
+// Range sets the range of the query
+// This is useful when you need to get a range of results
+// It will be ignored if offset is set
+// Note the range is inclusive of lower bound and exclusive of upper bound
+// Examples:
+//   - Range(0, 10) will return results 0-9
+//   - Range(10, 20) will return results 10-19
+//   - Range(0, 20) will return results 0-19
+func (q *Query[T]) Range(lower int, upper int) *Query[T] {
+	if q.offset != nil {
+		q.db.logger.Warn(
+			"Range should not be used with offset! It will be ignored.",
+		)
+		return q
+	}
+	q.writeDebugString(".Range(")
+	q.writeDebugString(strconv.Itoa(lower))
+	q.writeDebugString(", ")
+	q.writeDebugString(strconv.Itoa(upper))
+	q.writeDebugString(")")
+	q.rangeCondition = &RangeCondition{lower: lower, upper: upper}
 	return q
 }
 
@@ -344,7 +376,7 @@ func (q *Query[T]) Update(propertyName string, value any) error {
 
 // writeDebugString writes a string to the debug string if GSM_DEBUG is set to true
 func (q *Query[T]) writeDebugString(s string) {
-	if os.Getenv("GSM_DEBUG") == "true" {
+	if q.debug {
 		q.debugString.WriteString(s)
 	}
 }
@@ -388,6 +420,11 @@ func (q *Query[T]) BuildQuery() *gremlingo.GraphTraversal {
 	// Apply limit
 	if q.limit != nil {
 		query = query.Limit(*q.limit)
+	}
+
+	// Apply range
+	if q.rangeCondition != nil {
+		query = query.Range(q.rangeCondition.lower, q.rangeCondition.upper)
 	}
 
 	return query
