@@ -348,4 +348,26 @@ func TestUtils(t *testing.T) {
 			}
 		},
 	)
+	t.Run(
+		"TestNilPointerOnUnloadGremlinResultIntoStruct", func(t *testing.T) {
+			t.Parallel()
+			var v *testVertexForUtils
+			err := UnloadGremlinResultIntoStruct(v, &gremlingo.Result{Data: map[any]any{
+				"something": "test",
+			}})
+			if err == nil {
+				t.Errorf("Error should not be nil")
+			}
+		},
+	)
+	t.Run(
+		"TestNilResultUnloadGremlinResultIntoStruct", func(t *testing.T) {
+			t.Parallel()
+			var v testVertexForUtils
+			err := UnloadGremlinResultIntoStruct(v, nil)
+			if err == nil {
+				t.Errorf("Error should not be nil")
+			}
+		},
+	)
 }

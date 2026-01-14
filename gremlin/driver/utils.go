@@ -45,6 +45,9 @@ func UnloadGremlinResultIntoStruct(
 	v any,
 	result *gremlingo.Result,
 ) error {
+	if result == nil {
+		return errors.New("gremlin result is nil")
+	}
 	mapResult, ok := result.GetInterface().(map[any]any)
 	if !ok {
 		return errors.New("result is not a map")
@@ -63,6 +66,11 @@ func UnloadGremlinResultIntoStruct(
 	if rv.Kind() != reflect.Ptr {
 		return errors.New("v must be a pointer")
 	}
+
+	if rv.IsNil() {
+		return errors.New("v must be a non-nil pointer")
+	}
+
 	recursivelyUnloadIntoStruct(v, stringMap)
 	return nil
 }
