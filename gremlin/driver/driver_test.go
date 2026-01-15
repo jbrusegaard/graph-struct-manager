@@ -88,3 +88,30 @@ func TestDriverWhere(t *testing.T) {
 		t.Fatal("Model should not be nil")
 	}
 }
+
+func TestDriverSave(t *testing.T) {
+	db, err := Open(DbURL, dbDriver)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	testV := &testVertex{
+		Name: "pre-test",
+	}
+	err = createVertex(db, testV)
+	if err != nil {
+		t.Error(err)
+	}
+	testV.Name = "post-test"
+	err = Save(db, testV)
+	if err != nil {
+		return
+	}
+	vertex, err := Model[testVertex](db).ID(testV.ID)
+	if err != nil {
+		return
+	}
+	if vertex.Name != testV.Name {
+		t.Errorf("vertex name should be %s, got %s", testV.Name, vertex.Name)
+	}
+}
