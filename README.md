@@ -16,6 +16,7 @@ A type-safe, chainable query builder for Gremlin graph databases in Go. This ORM
   - [Dedup](#dedup)
   - [Limit](#limit)
   - [Offset](#offset)
+  - [Range](#range)
   - [OrderBy](#orderby)
   - [Find](#find)
   - [First](#first)
@@ -449,6 +450,53 @@ func getPage(db *GSM.GremlinDriver, page, pageSize int) ([]TestVertex, error) {
         Limit(pageSize).
         Find()
 }
+```
+
+### Range
+
+Sets a range of results to return using Gremlin's native `range()` step. This provides an alternative to using `Offset()` and `Limit()` together.
+
+**Signature:**
+```go
+func (q *Query[T]) Range(lower int, upper int) *Query[T]
+```
+
+**Important Notes:**
+- **Range cannot be used with Offset** - Using both together will cause undefined behavior. If `Offset()` is set, `Range()` will be ignored.
+- The range is **inclusive of the lower bound** and **exclusive of the upper bound** (similar to Go slices)
+- Range bounds are zero-indexed
+
+**Examples:**
+```go
+// Get results 0-9 (first 10 results)
+users := GSM.Model[TestVertex](db).
+    OrderBy("name", driver.Asc).
+    Range(0, 10)
+
+// Get results 10-19 (second page of 10)
+users := GSM.Model[TestVertex](db).
+    OrderBy("name", driver.Asc).
+    Range(10, 20)
+
+// Get results 50-99
+users := GSM.Model[TestVertex](db).
+    Range(50, 100)
+
+// Pagination using Range
+func getPageWithRange(db *GSM.GremlinDriver, page, pageSize int) ([]TestVertex, error) {
+    lower := (page - 1) * pageSize
+    upper := lower + pageSize
+    return GSM.Model[TestVertex](db).
+        OrderBy("id", driver.Asc).
+        Range(lower, upper).
+        Find()
+}
+
+// INCORRECT - Don't use Range with Offset (will be ignored)
+users := GSM.Model[TestVertex](db).
+    Offset(10).    // This will cause Range to be ignored
+    Range(0, 10).  // This will be ignored!
+    Find()
 ```
 
 ### OrderBy
