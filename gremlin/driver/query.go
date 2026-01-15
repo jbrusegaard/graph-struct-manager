@@ -173,7 +173,7 @@ func (q *Query[T]) Dedup() *Query[T] {
 // IDs adds the ids to the query
 // You can use this to speed up the query by using the graph index
 func (q *Query[T]) IDs(id ...any) *Query[T] {
-	if os.Getenv("GSM_DEBUG") == "true" {
+	if q.debug {
 		q.writeDebugString(".V(")
 		for _, id := range id {
 			q.writeDebugString(fmt.Sprintf("%v, ", id))
@@ -383,7 +383,7 @@ func (q *Query[T]) writeDebugString(s string) {
 
 // BuildQuery constructs the Gremlin traversal from the query conditions
 func (q *Query[T]) BuildQuery() *gremlingo.GraphTraversal {
-	if os.Getenv("GSM_DEBUG") == "true" {
+	if q.debug {
 		q.db.logger.Infof("Running Query: %s", q.debugString.String())
 		q.debugString.Reset()
 	}
