@@ -1,9 +1,10 @@
 package driver
 
 import (
+	"testing"
+
 	"github.com/google/uuid"
 	"github.com/jbrusegaard/graph-struct-manager/gsmtypes"
-	"testing"
 
 	gremlingo "github.com/apache/tinkerpop/gremlin-go/v3/driver"
 	"github.com/jbrusegaard/graph-struct-manager/comparator"
@@ -353,4 +354,59 @@ func TestQuery(t *testing.T) {
 			}
 		},
 	)
+	t.Run(
+		"Test Range Query", func(t *testing.T) {
+			t.Cleanup(cleanDB)
+			err = seedData(db, seededData)
+			if err != nil {
+				t.Error(err)
+			}
+
+			results, err := Model[testVertexForUtils](db).Range(0, 10).Find()
+			if err != nil {
+				t.Error(err)
+			}
+			if len(results) != len(seededData) {
+				t.Errorf("Expected %d results, got %d", len(seededData), len(results))
+			}
+			results2, err := Model[testVertexForUtils](db).OrderBy(gsmtypes.CreatedAt, Asc).Range(2, 10).Find()
+			if err != nil {
+				t.Error(err)
+			}
+			if results2[0].Name != seededData[2].Name {
+				t.Errorf("Expected %s result, got %s", seededData[2].Name, results2[0].Name)
+			}
+		},
+	)
+	t.Run(
+		"Test Range Query with 2 as lower bound", func(t *testing.T) {
+			t.Cleanup(cleanDB)
+			err = seedData(db, seededData)
+			if err != nil {
+				t.Error(err)
+			}
+
+			results, err := Model[testVertexForUtils](db).Range(2, 10).Find()
+			if err != nil {
+				t.Error(err)
+			}
+			if len(results) != len(seededData)-2 {
+				t.Errorf("Expected %d results, got %d", len(seededData)-2, len(results))
+			}
+		},
+	)
+	t.Run("Test Range with offset already set", func(t *testing.T) {
+		t.Cleanup(cleanDB)
+		err = seedData(db, seededData)
+		if err != nil {
+			t.Error(err)
+		}
+		results, err := Model[testVertexForUtils](db).Offset(1).Range(0, 10).Find()
+		if err != nil {
+			t.Error(err)
+		}
+		if len(results) != len(seededData)-1 {
+			t.Errorf("Expected %d results, got %d", len(seededData)-1, len(results))
+		}
+	})
 }
