@@ -137,12 +137,12 @@ linters:
     modernize:
       disable:
         - mapsloop
-    nakedret:
-      max-func-lines: 0
-      allow-no-explanation:
-        - funlen
-        - gocognit
-        - lll
+    # nakedret:
+    #   max-func-lines: 0
+    #   allow-no-explanation:
+    #     - funlen
+    #     - gocognit
+    #     - lll
     perfsprint:
       strconcat: false
     rowserrcheck:
