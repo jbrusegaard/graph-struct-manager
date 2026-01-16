@@ -1,5 +1,5 @@
-# Use the official Gremlin TinkerPop server as base
-FROM tinkerpop/gremlin-server:latest
+# Use a Gremlin server version compatible with gremlin-go
+FROM tinkerpop/gremlin-server:3.7.4
 
 # Set working directory
 WORKDIR /opt/gremlin-server
