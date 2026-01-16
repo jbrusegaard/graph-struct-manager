@@ -24,8 +24,11 @@ jobs:
     - name: Build
       run: go build -v ./...
 
-    - name: Docker
-      run: docker-compose up -d
+    - name: Set up Docker Compose
+      uses: docker/setup-compose-action@v1
+
+    - name: Start Docker Compose
+      run: docker compose up -d
 
     - name: Test
       run: go test -v ./...
