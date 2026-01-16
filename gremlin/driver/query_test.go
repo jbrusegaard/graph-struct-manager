@@ -129,6 +129,27 @@ func TestQuery(t *testing.T) {
 			}
 		},
 	)
+	t.Run(
+		"TestQueryPreQuery", func(t *testing.T) {
+			t.Cleanup(cleanDB)
+			err = seedData(db, seededData)
+			if err != nil {
+				t.Error(err)
+			}
+			preQuery := db.G().V().Has("name", "second")
+			result, err := Model[testVertexForUtils](
+				db,
+			).PreQuery(preQuery).
+				Where("sort", comparator.GT, 1).
+				Take()
+			if err != nil {
+				t.Error(err)
+			}
+			if result.Name != "second" {
+				t.Errorf("Expected second result, got %s", result.Name)
+			}
+		},
+	)
 
 	t.Run(
 		"TestDelete", func(t *testing.T) {
