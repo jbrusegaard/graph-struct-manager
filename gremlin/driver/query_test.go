@@ -3,11 +3,10 @@ package driver
 import (
 	"testing"
 
-	"github.com/google/uuid"
-	"github.com/jbrusegaard/graph-struct-manager/gsmtypes"
-
 	gremlingo "github.com/apache/tinkerpop/gremlin-go/v3/driver"
+	"github.com/google/uuid"
 	"github.com/jbrusegaard/graph-struct-manager/comparator"
+	"github.com/jbrusegaard/graph-struct-manager/gsmtypes"
 )
 
 var dbDriver = Neptune
@@ -390,7 +389,11 @@ func TestQuery(t *testing.T) {
 			if len(results) != len(seededData) {
 				t.Errorf("Expected %d results, got %d", len(seededData), len(results))
 			}
-			results2, err := Model[testVertexForUtils](db).OrderBy(gsmtypes.CreatedAt, Asc).Range(2, 10).Find()
+			results2, err := Model[testVertexForUtils](
+				db,
+			).OrderBy(gsmtypes.CreatedAt, Asc).
+				Range(2, 10).
+				Find()
 			if err != nil {
 				t.Error(err)
 			}
@@ -447,7 +450,11 @@ func TestQuery(t *testing.T) {
 			t.Errorf("Expected 2 results, got %d", len(results))
 		}
 		if results[0].Name != "first" || results[1].Name != "third" {
-			t.Errorf("Expected first and third results, got %s and %s", results[0].Name, results[1].Name)
+			t.Errorf(
+				"Expected first and third results, got %s and %s",
+				results[0].Name,
+				results[1].Name,
+			)
 		}
 	})
 	t.Run("TestQueryWhereWithout", func(t *testing.T) {

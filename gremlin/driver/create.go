@@ -101,7 +101,11 @@ func handlePropertyUpdate(
 				}
 			} else {
 				for _, key := range reflect.ValueOf(v).MapKeys() {
-					query = query.Property(gremlingo.Cardinality.Set, k, reflect.ValueOf(v).MapIndex(key).Interface())
+					query = query.Property(
+						gremlingo.Cardinality.Set,
+						k,
+						reflect.ValueOf(v).MapIndex(key).Interface(),
+					)
 				}
 			}
 		} else {

@@ -11,14 +11,14 @@ import (
 
 type testVertexForUtils struct {
 	gsmtypes.Vertex
-	Name              string            `json:"name"     gremlin:"name"`
-	Ignore            string            `json:"-"        gremlin:"-"`
-	ListTest          []string          `json:"listTest" gremlin:"listTest"`
-	MapTest           map[string]string `json:"mapTest" gremlin:"mapTest"`
-	Unmapped          int               `json:"unmapped" gremlin:"unmapped"`
-	Sort              int               `json:"sort"     gremlin:"sort"`
-	SubTraversalTest  string            `json:"testConstant" gremlinSubTraversal:"subTraversalTest"`
-	SubTraversalTest2 int               `json:"testConstant2" gremlinSubTraversal:"subTraversalTest2"`
+	Name              string            `json:"name"          gremlin:"name"`
+	Ignore            string            `json:"-"             gremlin:"-"`
+	ListTest          []string          `json:"listTest"      gremlin:"listTest"`
+	MapTest           map[string]string `json:"mapTest"       gremlin:"mapTest"`
+	Unmapped          int               `json:"unmapped"      gremlin:"unmapped"`
+	Sort              int               `json:"sort"          gremlin:"sort"`
+	SubTraversalTest  string            `json:"testConstant"                                    gremlinSubTraversal:"subTraversalTest"`
+	SubTraversalTest2 int               `json:"testConstant2"                                   gremlinSubTraversal:"subTraversalTest2"`
 	OmitEmptyTest     string            `json:"omitEmptyTest" gremlin:"omitEmptyTest,omitempty"`
 }
 
@@ -34,20 +34,20 @@ type testVertexWithCustomLabel struct {
 
 type testVertexWithExtras struct {
 	gsmtypes.Vertex
-	Name   string         `json:"name" gremlin:"name"`
+	Name   string         `json:"name"   gremlin:"name"`
 	Extras map[string]any `json:"extras" gremlin:"-,unmapped"`
 }
 
 type testVertexWithMultipleExtras struct {
 	gsmtypes.Vertex
-	Name     string         `json:"name" gremlin:"name"`
-	Extras   map[string]any `json:"extras" gremlin:"-,unmapped"`
+	Name     string         `json:"name"     gremlin:"name"`
+	Extras   map[string]any `json:"extras"   gremlin:"-,unmapped"`
 	ExtrasV2 map[string]any `json:"extrasV2" gremlin:"-,unmapped"`
 }
 
 type testVertexWithInvalidExtras struct {
 	gsmtypes.Vertex
-	Name   string            `json:"name" gremlin:"name"`
+	Name   string            `json:"name"   gremlin:"name"`
 	Extras map[string]string `json:"extras" gremlin:"-,unmapped"`
 }
 
