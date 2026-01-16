@@ -57,6 +57,11 @@ func (driver *GremlinDriver) Close() {
 	driver.remoteConn.Close()
 }
 
+// G exposes the traversal source for building custom traversals.
+func (driver *GremlinDriver) G() *gremlingo.GraphTraversalSource {
+	return driver.g
+}
+
 // Label returns a query builder for a specific label
 func (driver *GremlinDriver) Label(label string) *RawQuery {
 	return &RawQuery{

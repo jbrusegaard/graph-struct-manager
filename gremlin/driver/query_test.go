@@ -129,6 +129,27 @@ func TestQuery(t *testing.T) {
 			}
 		},
 	)
+	t.Run(
+		"TestQueryPreQuery", func(t *testing.T) {
+			t.Cleanup(cleanDB)
+			err = seedData(db, seededData)
+			if err != nil {
+				t.Error(err)
+			}
+			preQuery := db.G().V().Has("name", "second")
+			result, err := Model[testVertexForUtils](
+				db,
+			).PreQuery(preQuery).
+				Where("sort", comparator.GT, 1).
+				Take()
+			if err != nil {
+				t.Error(err)
+			}
+			if result.Name != "second" {
+				t.Errorf("Expected second result, got %s", result.Name)
+			}
+		},
+	)
 
 	t.Run(
 		"TestDelete", func(t *testing.T) {
@@ -407,6 +428,129 @@ func TestQuery(t *testing.T) {
 		}
 		if len(results) != len(seededData)-1 {
 			t.Errorf("Expected %d results, got %d", len(seededData)-1, len(results))
+		}
+	})
+	t.Run("TestQueryWhereIn", func(t *testing.T) {
+		t.Cleanup(cleanDB)
+		err = seedData(db, seededData)
+		if err != nil {
+			t.Error(err)
+		}
+		results, err := Model[testVertexForUtils](db).
+			Where("name", comparator.IN, []any{"first", "third"}).
+			OrderBy("sort", Asc).
+			Find()
+		if err != nil {
+			t.Error(err)
+		}
+		if len(results) != 2 {
+			t.Errorf("Expected 2 results, got %d", len(results))
+		}
+		if results[0].Name != "first" || results[1].Name != "third" {
+			t.Errorf("Expected first and third results, got %s and %s", results[0].Name, results[1].Name)
+		}
+	})
+	t.Run("TestQueryWhereWithout", func(t *testing.T) {
+		t.Cleanup(cleanDB)
+		err = seedData(db, seededData)
+		if err != nil {
+			t.Error(err)
+		}
+		results, err := Model[testVertexForUtils](db).
+			Where("name", comparator.WITHOUT, []any{"second"}).
+			Find()
+		if err != nil {
+			t.Error(err)
+		}
+		if len(results) != 2 {
+			t.Errorf("Expected 2 results, got %d", len(results))
+		}
+		for _, result := range results {
+			if result.Name == "second" {
+				t.Errorf("Did not expect second in results")
+			}
+		}
+	})
+	t.Run("TestQueryWhereContains", func(t *testing.T) {
+		t.Cleanup(cleanDB)
+		err = seedData(db, seededData)
+		if err != nil {
+			t.Error(err)
+		}
+		result, err := Model[testVertexForUtils](db).
+			Where("name", comparator.CONTAINS, "eco").
+			Take()
+		if err != nil {
+			t.Error(err)
+		}
+		if result.Name != "second" {
+			t.Errorf("Expected second result, got %s", result.Name)
+		}
+	})
+	t.Run("TestQueryWhereID", func(t *testing.T) {
+		t.Cleanup(cleanDB)
+		err = seedData(db, seededData)
+		if err != nil {
+			t.Error(err)
+		}
+		model, err := Model[testVertexForUtils](db).Take()
+		if err != nil {
+			t.Error(err)
+		}
+		result, err := Model[testVertexForUtils](db).
+			Where("id", comparator.EQ, model.ID).
+			Take()
+		if err != nil {
+			t.Error(err)
+		}
+		if result.ID != model.ID {
+			t.Errorf("Expected %s result, got %s", model.ID, result.ID)
+		}
+	})
+	t.Run("TestQueryLimitOffset", func(t *testing.T) {
+		t.Cleanup(cleanDB)
+		err = seedData(db, seededData)
+		if err != nil {
+			t.Error(err)
+		}
+		results, err := Model[testVertexForUtils](db).
+			OrderBy("sort", Asc).
+			Offset(1).
+			Limit(1).
+			Find()
+		if err != nil {
+			t.Error(err)
+		}
+		if len(results) != 1 {
+			t.Errorf("Expected 1 result, got %d", len(results))
+		}
+		if results[0].Name != "second" {
+			t.Errorf("Expected second result, got %s", results[0].Name)
+		}
+	})
+	t.Run("TestQueryIDsMultiple", func(t *testing.T) {
+		t.Cleanup(cleanDB)
+		err = seedData(db, seededData)
+		if err != nil {
+			t.Error(err)
+		}
+		models, err := Model[testVertexForUtils](db).OrderBy("sort", Asc).Find()
+		if err != nil {
+			t.Error(err)
+		}
+		results, err := Model[testVertexForUtils](db).
+			IDs(models[0].ID, models[2].ID).
+			OrderBy("sort", Asc).
+			Find()
+		if err != nil {
+			t.Error(err)
+		}
+		if len(results) != 2 {
+			t.Errorf("Expected 2 results, got %d", len(results))
+		}
+		if results[0].Name != models[0].Name || results[1].Name != models[2].Name {
+			t.Errorf("Expected %s and %s, got %s and %s",
+				models[0].Name, models[2].Name, results[0].Name, results[1].Name)
 		}
 	})
 }

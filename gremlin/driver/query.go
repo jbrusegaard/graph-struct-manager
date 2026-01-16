@@ -30,6 +30,7 @@ type Query[T gsmtypes.VertexType] struct {
 	limit          *int
 	offset         *int
 	rangeCondition *RangeCondition
+	preTraversal   *gremlingo.GraphTraversal
 	subTraversals  map[string]*gremlingo.GraphTraversal
 	orderBy        *OrderCondition
 	dedup          bool
@@ -170,11 +171,26 @@ func (q *Query[T]) Dedup() *Query[T] {
 	return q
 }
 
+// PreQuery sets a traversal to run before applying query conditions.
+// When set, it replaces the default V() start for the query.
+func (q *Query[T]) PreQuery(traversal *gremlingo.GraphTraversal) *Query[T] {
+	if traversal == nil {
+		return q
+	}
+	q.preTraversal = traversal
+	q.resetDebugStringForPreQuery()
+	return q
+}
+
 // IDs adds the ids to the query
 // You can use this to speed up the query by using the graph index
 func (q *Query[T]) IDs(id ...any) *Query[T] {
 	if q.debug {
-		q.writeDebugString(".V(")
+		if q.preTraversal != nil {
+			q.writeDebugString(".HasId(")
+		} else {
+			q.writeDebugString(".V(")
+		}
 		for _, id := range id {
 			q.writeDebugString(fmt.Sprintf("%v, ", id))
 		}
@@ -388,9 +404,16 @@ func (q *Query[T]) BuildQuery() *gremlingo.GraphTraversal {
 		q.debugString.Reset()
 	}
 	var query *gremlingo.GraphTraversal
-	if len(q.ids) > 0 {
+
+	switch {
+	case q.preTraversal != nil:
+		query = q.preTraversal.Clone()
+		if len(q.ids) > 0 {
+			query = query.HasId(q.ids...)
+		}
+	case len(q.ids) > 0:
 		query = q.db.g.V(q.ids...)
-	} else {
+	default:
 		query = q.db.g.V()
 	}
 
@@ -468,6 +491,20 @@ func (q *Query[T]) addQueryConditions(query *gremlingo.GraphTraversal) {
 			}
 		}
 	}
+}
+
+func (q *Query[T]) resetDebugStringForPreQuery() {
+	if !q.debug {
+		return
+	}
+	queryAsString := strings.Builder{}
+	queryAsString.WriteString("PreQuery()")
+	if q.label != "" {
+		queryAsString.WriteString(".HasLabel(")
+		queryAsString.WriteString(q.label)
+		queryAsString.WriteString(")")
+	}
+	q.debugString = &queryAsString
 }
 
 // ToMapTraversal converts a Gremlin traversal to a map traversal using valuemap and projecting the subtraversals
