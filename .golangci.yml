@@ -191,10 +191,10 @@ formatters:
     - goimports
     - golines
     - swaggo
-  # Formatters settings.
-  settings:
-    # See the dedicated "formatters.settings" documentation section.
-    option: value
+  # # Formatters settings.
+  # settings:
+  #   # See the dedicated "formatters.settings" documentation section.
+  #   option: value
   exclusions:
     # Log a warning if an exclusion path is unused.
     # Default: false
