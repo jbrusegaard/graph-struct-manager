@@ -32,6 +32,30 @@ type testVertexWithCustomLabel struct {
 	Name string `json:"name" gremlin:"name"`
 }
 
+type testVertexWithExtras struct {
+	gsmtypes.Vertex
+	Name   string         `json:"name" gremlin:"name"`
+	Extras map[string]any `json:"extras" gremlin:"-,unmapped"`
+}
+
+type testVertexWithMultipleExtras struct {
+	gsmtypes.Vertex
+	Name     string         `json:"name" gremlin:"name"`
+	Extras   map[string]any `json:"extras" gremlin:"-,unmapped"`
+	ExtrasV2 map[string]any `json:"extrasV2" gremlin:"-,unmapped"`
+}
+
+type testVertexWithInvalidExtras struct {
+	gsmtypes.Vertex
+	Name   string            `json:"name" gremlin:"name"`
+	Extras map[string]string `json:"extras" gremlin:"-,unmapped"`
+}
+
+type testVertexWithSubTraversalPreference struct {
+	gsmtypes.Vertex
+	Value string `json:"value" gremlin:"value" gremlinSubTraversal:"value_sub"`
+}
+
 // Label implements a custom label function
 func (v *testVertexWithCustomLabel) Label() string {
 	return "customVertexLabel"
@@ -90,6 +114,117 @@ func TestUtils(t *testing.T) {
 			}
 			if v.Name != "test" {
 				t.Errorf("Vertex Name should be test, got %s", v.Name)
+			}
+		},
+	)
+	t.Run(
+		"TestUnloadGremlinResultIntoStructExtras", func(t *testing.T) {
+			t.Parallel()
+			var v testVertexWithExtras
+			now := time.Now().UTC()
+			err := UnloadGremlinResultIntoStruct(
+				&v, &gremlingo.Result{
+					Data: map[any]any{
+						"id":            "1",
+						"last_modified": now,
+						"created_at":    now,
+						"name":          "test",
+						"unknown":       "extra",
+						"flag":          true,
+						"count":         42,
+						"tags":          []any{"a", "b"},
+					},
+				},
+			)
+			if err != nil {
+				t.Errorf("Error unloading gremlin result into struct: %v", err)
+			}
+			if v.Name != "test" {
+				t.Errorf("Vertex Name should be test, got %s", v.Name)
+			}
+			if v.Extras == nil {
+				t.Errorf("Extras should not be nil")
+			}
+			if v.Extras["unknown"] != "extra" {
+				t.Errorf("Extras should contain unknown field")
+			}
+			if v.Extras["flag"] != true {
+				t.Errorf("Extras should contain boolean field")
+			}
+			if v.Extras["count"] != 42 {
+				t.Errorf("Extras should contain int field")
+			}
+			tags, ok := v.Extras["tags"].([]any)
+			if !ok || len(tags) != 2 {
+				t.Errorf("Extras should contain slice field")
+			}
+			if _, ok := v.Extras["name"]; ok {
+				t.Errorf("Extras should not contain mapped fields")
+			}
+		},
+	)
+	t.Run(
+		"TestUnloadGremlinResultIntoStructMultipleExtras", func(t *testing.T) {
+			t.Parallel()
+			var v testVertexWithMultipleExtras
+			err := UnloadGremlinResultIntoStruct(
+				&v, &gremlingo.Result{
+					Data: map[any]any{
+						"id":      "1",
+						"name":    "test",
+						"unknown": "extra",
+					},
+				},
+			)
+			if err != nil {
+				t.Errorf("Error unloading gremlin result into struct: %v", err)
+			}
+			if v.Extras == nil || v.ExtrasV2 == nil {
+				t.Errorf("Extras should not be nil")
+			}
+			if v.Extras["unknown"] != "extra" || v.ExtrasV2["unknown"] != "extra" {
+				t.Errorf("Extras should contain unknown field")
+			}
+		},
+	)
+	t.Run(
+		"TestUnloadGremlinResultIntoStructInvalidExtrasType", func(t *testing.T) {
+			t.Parallel()
+			var v testVertexWithInvalidExtras
+			err := UnloadGremlinResultIntoStruct(
+				&v, &gremlingo.Result{
+					Data: map[any]any{
+						"id":      "1",
+						"name":    "test",
+						"unknown": "extra",
+					},
+				},
+			)
+			if err != nil {
+				t.Errorf("Error unloading gremlin result into struct: %v", err)
+			}
+			if v.Extras != nil {
+				t.Errorf("Extras should remain nil when type is unsupported")
+			}
+		},
+	)
+	t.Run(
+		"TestUnloadGremlinResultIntoStructSubTraversalPreferred", func(t *testing.T) {
+			t.Parallel()
+			var v testVertexWithSubTraversalPreference
+			err := UnloadGremlinResultIntoStruct(
+				&v, &gremlingo.Result{
+					Data: map[any]any{
+						"value":     "base",
+						"value_sub": "sub",
+					},
+				},
+			)
+			if err != nil {
+				t.Errorf("Error unloading gremlin result into struct: %v", err)
+			}
+			if v.Value != "sub" {
+				t.Errorf("Value should prefer subtraversal result, got %s", v.Value)
 			}
 		},
 	)

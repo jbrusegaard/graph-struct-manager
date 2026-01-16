@@ -71,11 +71,28 @@ func UnloadGremlinResultIntoStruct(
 		return errors.New("v must be a non-nil pointer")
 	}
 
-	recursivelyUnloadIntoStruct(v, stringMap)
+	usedKeys := make(map[string]struct{}, len(stringMap))
+	extrasFields := make([]reflect.Value, 0)
+	recursivelyUnloadIntoStruct(v, stringMap, usedKeys, &extrasFields)
+	if len(extrasFields) > 0 {
+		extras := make(map[string]any, len(stringMap))
+		for key, value := range stringMap {
+			if _, ok = usedKeys[key]; ok {
+				continue
+			}
+			extras[key] = value
+		}
+		setGremlinExtras(extrasFields, extras)
+	}
 	return nil
 }
 
-func recursivelyUnloadIntoStruct(v any, stringMap map[string]any) {
+func recursivelyUnloadIntoStruct(
+	v any,
+	stringMap map[string]any,
+	usedKeys map[string]struct{},
+	extrasFields *[]reflect.Value,
+) {
 	rv := reflect.ValueOf(v).Elem()
 	rt := rv.Type()
 
@@ -84,44 +101,132 @@ func recursivelyUnloadIntoStruct(v any, stringMap map[string]any) {
 		fieldType := rt.Field(i)
 		// handle anonymous Vertex field
 		if fieldType.Anonymous {
-			recursivelyUnloadIntoStruct(field.Addr().Interface(), stringMap)
-		}
-
-		gremlinTag := rt.Field(i).Tag.Get(gsmtypes.GremlinTag)
-		gremlinSubTraversalTag := rt.Field(i).Tag.Get(gsmtypes.GremlinSubTraversalTag)
-		if !field.CanInterface() || !field.CanSet() || ((gremlinTag == "" || gremlinTag == "-") &&
-			(gremlinSubTraversalTag == "" || gremlinSubTraversalTag == "-")) {
-			continue
-		}
-		_, gremlinTagOk := stringMap[gremlinTag]
-		_, subtraversalTagOk := stringMap[gremlinSubTraversalTag]
-		if !gremlinTagOk && !subtraversalTagOk {
-			continue
-		}
-		if subtraversalTagOk {
-			gremlinTag = gremlinSubTraversalTag
-		}
-		gType := reflect.TypeOf(stringMap[gremlinTag])
-
-		switch {
-		case gType.ConvertibleTo(field.Type()):
-			field.Set(reflect.ValueOf(stringMap[gremlinTag]).Convert(field.Type()))
-		case gType.Kind() == reflect.Slice:
-			strSlice := stringMap[gremlinTag].([]any) //nolint:errcheck // we already validated via reflect type check
-			slice := reflect.MakeSlice(
-				field.Type(), len(strSlice), len(strSlice),
+			recursivelyUnloadIntoStruct(
+				field.Addr().Interface(),
+				stringMap,
+				usedKeys,
+				extrasFields,
 			)
-			for i, v := range strSlice {
-				slice.Index(i).Set(reflect.ValueOf(v).Convert(field.Type().Elem()))
-			}
-			field.Set(slice)
-		case field.Type().Kind() == reflect.Slice && gType.ConvertibleTo(field.Type().Elem()):
-			// Handle case where field is a slice but gremlin result is a single value
-			// Create a slice with one element
-			slice := reflect.MakeSlice(field.Type(), 1, 1)
-			slice.Index(0).Set(reflect.ValueOf(stringMap[gremlinTag]).Convert(field.Type().Elem()))
-			field.Set(slice)
 		}
+
+		unloadFieldFromResult(
+			field,
+			fieldType,
+			stringMap,
+			usedKeys,
+			extrasFields,
+		)
+	}
+}
+
+func unloadFieldFromResult(
+	field reflect.Value,
+	fieldType reflect.StructField,
+	stringMap map[string]any,
+	usedKeys map[string]struct{},
+	extrasFields *[]reflect.Value,
+) {
+	// Resolve and set a single struct field from the Gremlin result map.
+	gremlinTag := fieldType.Tag.Get(gsmtypes.GremlinTag)
+	gremlinSubTraversalTag := fieldType.Tag.Get(gsmtypes.GremlinSubTraversalTag)
+	if !field.CanInterface() || !field.CanSet() {
+		return
+	}
+
+	tagParts := gremlinTagOptions{name: gremlinTag}
+	if gremlinTag != "" {
+		tagParts = parseGremlinTag(gremlinTag)
+	}
+	if tagParts.unmapped {
+		captureUnmappedField(field, extrasFields)
+		return
+	}
+
+	tagName := tagParts.name
+	if (tagName == "" || tagName == "-") &&
+		(gremlinSubTraversalTag == "" || gremlinSubTraversalTag == "-") {
+		return
+	}
+
+	selectedKey, ok := selectGremlinKey(tagName, gremlinSubTraversalTag, stringMap)
+	if !ok {
+		return
+	}
+
+	usedKeys[selectedKey] = struct{}{}
+	setFieldFromValue(field, stringMap[selectedKey])
+}
+
+func captureUnmappedField(field reflect.Value, extrasFields *[]reflect.Value) {
+	// Collect all fields marked to receive unmapped properties.
+	*extrasFields = append(*extrasFields, field)
+}
+
+func selectGremlinKey(tagName, subTraversalTag string, stringMap map[string]any) (string, bool) {
+	// Pick the key to use (subtraversal wins if present in the result).
+	if subTraversalTag != "" && subTraversalTag != "-" {
+		if _, ok := stringMap[subTraversalTag]; ok {
+			return subTraversalTag, true
+		}
+	}
+	if tagName != "" && tagName != "-" {
+		if _, ok := stringMap[tagName]; ok {
+			return tagName, true
+		}
+	}
+	return "", false
+}
+
+func setFieldFromValue(field reflect.Value, value any) {
+	// Assign a Gremlin value into a field, handling slice conversions.
+	gType := reflect.TypeOf(value)
+
+	switch {
+	case gType.ConvertibleTo(field.Type()):
+		field.Set(reflect.ValueOf(value).Convert(field.Type()))
+	case gType.Kind() == reflect.Slice:
+		strSlice := value.([]any) //nolint:errcheck // we already validated via reflect type check
+		slice := reflect.MakeSlice(
+			field.Type(), len(strSlice), len(strSlice),
+		)
+		for i, v := range strSlice {
+			slice.Index(i).Set(reflect.ValueOf(v).Convert(field.Type().Elem()))
+		}
+		field.Set(slice)
+	case field.Type().Kind() == reflect.Slice && gType.ConvertibleTo(field.Type().Elem()):
+		// Handle case where field is a slice but gremlin result is a single value
+		// Create a slice with one element
+		slice := reflect.MakeSlice(field.Type(), 1, 1)
+		slice.Index(0).Set(
+			reflect.ValueOf(value).Convert(field.Type().Elem()),
+		)
+		field.Set(slice)
+	}
+}
+
+func setGremlinExtras(extrasFields []reflect.Value, extras map[string]any) {
+	if len(extrasFields) == 0 {
+		return
+	}
+	anyType := reflect.TypeFor[any]()
+	for _, extrasField := range extrasFields {
+		if !extrasField.IsValid() {
+			continue
+		}
+		if !extrasField.CanSet() {
+			continue
+		}
+		if extrasField.Kind() != reflect.Map || extrasField.Type().Key().Kind() != reflect.String {
+			continue
+		}
+		if extrasField.Type().Elem() != anyType {
+			continue
+		}
+		extrasValue := reflect.MakeMapWithSize(extrasField.Type(), len(extras))
+		for key, value := range extras {
+			extrasValue.SetMapIndex(reflect.ValueOf(key), reflect.ValueOf(value))
+		}
+		extrasField.Set(extrasValue)
 	}
 }
 
@@ -221,6 +326,9 @@ func structToMap( //nolint:gocognit
 
 		// Parse tag options (e.g., "field_name,omitempty")
 		tagParts := parseGremlinTag(gremlinTag)
+		if tagParts.unmapped {
+			continue
+		}
 
 		// Check if field is a pointer and is nil (unset)
 		if fieldValue.Kind() == reflect.Ptr {

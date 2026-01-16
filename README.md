@@ -16,7 +16,6 @@ A type-safe, chainable query builder for Gremlin graph databases in Go. This ORM
   - [Dedup](#dedup)
   - [Limit](#limit)
   - [Offset](#offset)
-  - [Range](#range)
   - [OrderBy](#orderby)
   - [Find](#find)
   - [First](#first)
@@ -48,6 +47,24 @@ type TestVertex struct {
     Tags        []string `gremlin:"tags"`
 }
 ```
+
+### Capturing unmapped properties
+
+Gremlin is schema-less, so results can include properties not represented in your struct. To preserve
+them, add a map field tagged with `gremlin:"-,unmapped"`.
+
+```go
+type User struct {
+    types.Vertex
+    Name   string         `gremlin:"name"`
+    Email  string         `gremlin:"email"`
+    Extras map[string]any `gremlin:"-,unmapped"`
+}
+```
+
+All properties returned by Gremlin that do not match a `gremlin` or `gremlinSubTraversal` tag will
+be collected into the `Extras` map. You can mark multiple fields as `gremlin:"-,unmapped"`, but
+each will receive a copy of the same data, which is memory-inefficient.
 
 ### Using omitempty
 

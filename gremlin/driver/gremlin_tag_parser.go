@@ -4,6 +4,7 @@ package driver
 type gremlinTagOptions struct {
 	name      string
 	omitEmpty bool
+	unmapped  bool
 }
 
 // parseGremlinTag parses a gremlin tag and returns the property name and options
@@ -16,12 +17,16 @@ func parseGremlinTag(tag string) gremlinTagOptions {
 	opts := gremlinTagOptions{
 		name:      parts[0],
 		omitEmpty: false,
+		unmapped:  false,
 	}
 
 	// Check for options
 	for i := 1; i < len(parts); i++ {
 		if parts[i] == "omitempty" {
 			opts.omitEmpty = true
+		}
+		if parts[i] == "unmapped" {
+			opts.unmapped = true
 		}
 	}
 
