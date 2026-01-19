@@ -23,6 +23,10 @@ func updateVertex[T gsmtypes.VertexType](db *GremlinDriver, value *T) error {
 		db.logger.Errorf("Validation failed: %v", err)
 		return err
 	}
+	err = runBeforeUpdateHook(db, value)
+	if err != nil {
+		return err
+	}
 	now := time.Now().UTC()
 	_, mapValue, err := structToMap(value)
 	if err != nil {
@@ -44,13 +48,17 @@ func updateVertex[T gsmtypes.VertexType](db *GremlinDriver, value *T) error {
 	}
 	reflectNow := reflect.ValueOf(now)
 	reflect.ValueOf(value).Elem().FieldByName("LastModified").Set(reflectNow)
-	return nil
+	return runAfterUpdateHook(db, value)
 }
 
 func createVertex[T gsmtypes.VertexType](db *GremlinDriver, value *T) error {
 	err := validateStructPointerWithAnonymousVertex(value)
 	if err != nil {
 		db.logger.Errorf("Validation failed: %v", err)
+		return err
+	}
+	err = runBeforeCreateHook(db, value)
+	if err != nil {
 		return err
 	}
 	now := time.Now().UTC()
@@ -60,6 +68,9 @@ func createVertex[T gsmtypes.VertexType](db *GremlinDriver, value *T) error {
 	}
 	id, hasID := mapValue["id"]
 	delete(mapValue, "id")
+	if !hasID || id == nil {
+		hasID = false
+	}
 	mapValue[gsmtypes.LastModified] = now
 	mapValue[gsmtypes.CreatedAt] = now
 	query := db.g.AddV(label)
@@ -81,7 +92,7 @@ func createVertex[T gsmtypes.VertexType](db *GremlinDriver, value *T) error {
 	reflectNow := reflect.ValueOf(now)
 	reflect.ValueOf(value).Elem().FieldByName("LastModified").Set(reflectNow)
 	reflect.ValueOf(value).Elem().FieldByName("CreatedAt").Set(reflectNow)
-	return nil
+	return runAfterCreateHook(db, value)
 }
 
 func handlePropertyUpdate(
