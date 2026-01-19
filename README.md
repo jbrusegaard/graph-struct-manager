@@ -7,6 +7,7 @@ A type-safe, chainable query builder for Gremlin graph databases in Go. This ORM
 - [Overview](#overview)
 - [Setup](#setup)
   - [Custom Labels](#custom-labels)
+- [Hooks](#hooks)
 - [Environment Variables](#environment-variables)
 - [Query Builder Functions](#query-builder-functions)
   - [NewQuery](#newquery)
@@ -181,6 +182,55 @@ if err != nil {
 - If no ID is set, the database will automatically generate one
 - Custom IDs must be unique within the graph
 - The ID type can be string, int, or any type supported by your graph database
+
+## Hooks
+
+Implement hook interfaces on your vertex types to run logic before/after create or update.
+Hooks receive the `*GremlinDriver` used for the operation and can abort by returning an error.
+
+**Available hooks:**
+- `BeforeCreate(db *GremlinDriver) error`
+- `AfterCreate(db *GremlinDriver) error`
+- `BeforeUpdate(db *GremlinDriver) error`
+- `AfterUpdate(db *GremlinDriver) error`
+
+**Order of execution:**
+- `Create` calls `BeforeCreate`, writes the vertex, sets `ID/CreatedAt/LastModified`, then `AfterCreate`.
+- `Update` calls `BeforeUpdate`, writes the changes, updates `LastModified`, then `AfterUpdate`.
+- `Save` dispatches to `Create` or `Update` based on whether `ID` is set.
+
+**Example:**
+```go
+type User struct {
+    types.Vertex
+    Name   string `gremlin:"name"`
+    Status string `gremlin:"status"`
+}
+
+func (u *User) BeforeCreate(db *driver.GremlinDriver) error {
+    if u.Name == "" {
+        return errors.New("name is required")
+    }
+    u.Status = "active"
+    return nil
+}
+
+func (u *User) AfterCreate(db *driver.GremlinDriver) error {
+    // e.g. enqueue an event
+    return nil
+}
+
+func (u *User) BeforeUpdate(db *driver.GremlinDriver) error {
+    if u.ID == nil {
+        return errors.New("missing id")
+    }
+    return nil
+}
+
+func (u *User) AfterUpdate(db *driver.GremlinDriver) error {
+    return nil
+}
+```
 
 Import the necessary packages and connect to your Gremlin database:
 
