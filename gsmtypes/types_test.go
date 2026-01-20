@@ -1,13 +1,15 @@
-package gsmtypes
+package gsmtypes_test
 
 import (
 	"testing"
 	"time"
+
+	"github.com/jbrusegaard/graph-struct-manager/gsmtypes"
 )
 
 func TestTypes(t *testing.T) {
 	t.Parallel()
-	vertex := Vertex{
+	vertex := gsmtypes.Vertex{
 		ID: "1",
 	}
 	if vertex.ID != "1" {
