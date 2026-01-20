@@ -266,8 +266,10 @@ func (q *Query[T]) OrderBy(field string, order GremlinOrder) *Query[T] {
 // Find executes the query and returns all matching results
 func (q *Query[T]) Find() ([]T, error) {
 	q.writeDebugString(".ToList()")
-	query := q.BuildQuery()
-	queryResults, err := ToMapTraversal(query, q.subTraversals, true).ToList()
+	query := q.buildBaseQuery()
+	query = ToMapTraversal(query, q.subTraversals, true)
+	query = q.doOrderSkipRange(query)
+	queryResults, err := query.ToList()
 	if err != nil {
 		return nil, err
 	}
@@ -291,8 +293,10 @@ func (q *Query[T]) Find() ([]T, error) {
 func (q *Query[T]) Take() (T, error) {
 	q.writeDebugString(".Next()")
 	var v T
-	query := q.BuildQuery()
-	result, err := ToMapTraversal(query, q.subTraversals, true).Next()
+	query := q.buildBaseQuery()
+	query = ToMapTraversal(query, q.subTraversals, true)
+	query = q.doOrderSkipRange(query)
+	result, err := query.Next()
 	if err != nil {
 		return v, err
 	}
@@ -415,6 +419,11 @@ func (q *Query[T]) writeDebugString(s string) {
 
 // BuildQuery constructs the Gremlin traversal from the query conditions
 func (q *Query[T]) BuildQuery() *gremlingo.GraphTraversal {
+	query := q.buildBaseQuery()
+	return q.doOrderSkipRange(query)
+}
+
+func (q *Query[T]) buildBaseQuery() *gremlingo.GraphTraversal {
 	if q.debug {
 		q.db.logger.Infof("Running Query: %s", q.debugString.String())
 		q.debugString.Reset()
@@ -442,7 +451,10 @@ func (q *Query[T]) BuildQuery() *gremlingo.GraphTraversal {
 	if q.dedup {
 		query = query.Dedup()
 	}
+	return query
+}
 
+func (q *Query[T]) doOrderSkipRange(query *gremlingo.GraphTraversal) *gremlingo.GraphTraversal {
 	if q.orderBy != nil {
 		if q.orderBy.desc {
 			query.Order().By(q.orderBy.field, Order.Desc)
@@ -465,7 +477,6 @@ func (q *Query[T]) BuildQuery() *gremlingo.GraphTraversal {
 	if q.rangeCondition != nil {
 		query = query.Range(q.rangeCondition.lower, q.rangeCondition.upper)
 	}
-
 	return query
 }
 
