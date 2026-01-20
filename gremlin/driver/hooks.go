@@ -14,6 +14,12 @@ type AfterUpdateHook interface {
 	AfterUpdate(db *GremlinDriver) error
 }
 
+// AfterFindHook runs after a vertex has been loaded from the database.
+// Returning an error propagates to the caller.
+type AfterFindHook interface {
+	AfterFind(db *GremlinDriver) error
+}
+
 func runBeforeUpdateHook[T any](db *GremlinDriver, value *T) error {
 	if value == nil {
 		return nil
@@ -38,6 +44,20 @@ func runAfterUpdateHook[T any](db *GremlinDriver, value *T) error {
 	}
 	if err := hook.AfterUpdate(db); err != nil {
 		return fmt.Errorf("after update hook: %w", err)
+	}
+	return nil
+}
+
+func runAfterFindHook[T any](db *GremlinDriver, value *T) error {
+	if value == nil {
+		return nil
+	}
+	hook, ok := any(value).(AfterFindHook)
+	if !ok {
+		return nil
+	}
+	if err := hook.AfterFind(db); err != nil {
+		return fmt.Errorf("after find hook: %w", err)
 	}
 	return nil
 }

@@ -279,6 +279,9 @@ func (q *Query[T]) Find() ([]T, error) {
 		if err != nil {
 			return nil, err
 		}
+		if findHookErr := runAfterFindHook(q.db, &v); findHookErr != nil {
+			return nil, findHookErr
+		}
 		results = append(results, v)
 	}
 	return results, nil
@@ -295,7 +298,14 @@ func (q *Query[T]) Take() (T, error) {
 	}
 
 	err = UnloadGremlinResultIntoStruct(&v, result)
-	return v, err
+	if err != nil {
+		return v, err
+	}
+
+	if findHookErr := runAfterFindHook(q.db, &v); findHookErr != nil {
+		return v, findHookErr
+	}
+	return v, nil
 }
 
 // Count returns the number of matching results
@@ -335,7 +345,13 @@ func (q *Query[T]) ID(id any) (T, error) {
 		return v, err
 	}
 	err = UnloadGremlinResultIntoStruct(&v, result)
-	return v, err
+	if err != nil {
+		return v, err
+	}
+	if findHookErr := runAfterFindHook(q.db, &v); findHookErr != nil {
+		return v, findHookErr
+	}
+	return v, nil
 }
 
 // Update updates a property of the struct

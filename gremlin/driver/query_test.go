@@ -1,4 +1,4 @@
-package driver
+package driver_test
 
 import (
 	"testing"
@@ -6,14 +6,15 @@ import (
 	gremlingo "github.com/apache/tinkerpop/gremlin-go/v3/driver"
 	"github.com/google/uuid"
 	"github.com/jbrusegaard/graph-struct-manager/comparator"
+	"github.com/jbrusegaard/graph-struct-manager/gremlin/driver"
 	"github.com/jbrusegaard/graph-struct-manager/gsmtypes"
 )
 
-var dbDriver = Neptune
+var dbDriver = driver.Neptune
 
-func seedData(db *GremlinDriver, data []testVertexForUtils) error {
+func seedData(db *driver.GremlinDriver, data []testVertexForUtils) error {
 	for _, d := range data {
-		err := Create(db, &d)
+		err := driver.Create(db, &d)
 		if err != nil {
 			return err
 		}
@@ -22,12 +23,12 @@ func seedData(db *GremlinDriver, data []testVertexForUtils) error {
 }
 
 func cleanDB() {
-	db, _ := Open(DbURL, dbDriver)
-	<-db.g.V().Drop().Iterate()
+	db, _ := driver.Open(DbURL, dbDriver)
+	<-db.G().V().Drop().Iterate()
 }
 
 func TestQuery(t *testing.T) {
-	db, err := Open(DbURL, dbDriver)
+	db, err := driver.Open(DbURL, dbDriver)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +59,7 @@ func TestQuery(t *testing.T) {
 			if err != nil {
 				t.Error(err)
 			}
-			model := Model[testVertexForUtils](db)
+			model := driver.Model[testVertexForUtils](db)
 			results, err := model.Where("name", comparator.EQ, "first").Find()
 			if err != nil {
 				t.Error(err)
@@ -73,10 +74,10 @@ func TestQuery(t *testing.T) {
 	)
 	orderTests := []struct {
 		Name  string
-		Order GremlinOrder
+		Order driver.GremlinOrder
 	}{
-		{Name: "TestFindNoWhereOrderAsc", Order: Asc},
-		{Name: "TestFindWhereOrderDesc", Order: Desc},
+		{Name: "TestFindNoWhereOrderAsc", Order: driver.Asc},
+		{Name: "TestFindWhereOrderDesc", Order: driver.Desc},
 	}
 	for _, orderTest := range orderTests {
 		t.Run(
@@ -86,7 +87,7 @@ func TestQuery(t *testing.T) {
 				if err != nil {
 					t.Error(err)
 				}
-				model := Model[testVertexForUtils](db)
+				model := driver.Model[testVertexForUtils](db)
 				results, err := model.OrderBy("sort", orderTest.Order).Find()
 				if err != nil {
 					t.Error(err)
@@ -97,9 +98,9 @@ func TestQuery(t *testing.T) {
 				for i, item := range results {
 					var idx int
 					switch orderTest.Order {
-					case Asc:
+					case driver.Asc:
 						idx = i
-					case Desc:
+					case driver.Desc:
 						idx = len(results) - i - 1
 					}
 					if item.Name != seededData[idx].Name {
@@ -116,7 +117,7 @@ func TestQuery(t *testing.T) {
 			if err != nil {
 				t.Error(err)
 			}
-			model := Model[testVertexForUtils](
+			model := driver.Model[testVertexForUtils](
 				db,
 			).WhereTraversal(gremlingo.T__.Has("name", "second"))
 			result, err := model.Take()
@@ -136,7 +137,7 @@ func TestQuery(t *testing.T) {
 				t.Error(err)
 			}
 			preQuery := db.G().V().Has("name", "second")
-			result, err := Model[testVertexForUtils](
+			result, err := driver.Model[testVertexForUtils](
 				db,
 			).PreQuery(preQuery).
 				Where("sort", comparator.GT, 1).
@@ -157,11 +158,11 @@ func TestQuery(t *testing.T) {
 			if err != nil {
 				t.Error(err)
 			}
-			err := Model[testVertexForUtils](db).Limit(1).Delete()
+			err := driver.Model[testVertexForUtils](db).Limit(1).Delete()
 			if err != nil {
 				t.Error(err)
 			}
-			count, err := Model[testVertexForUtils](db).Count()
+			count, err := driver.Model[testVertexForUtils](db).Count()
 			if err != nil {
 				t.Error(err)
 			}
@@ -178,11 +179,11 @@ func TestQuery(t *testing.T) {
 			if err != nil {
 				t.Error(err)
 			}
-			model, err := Model[testVertexForUtils](db).Take()
+			model, err := driver.Model[testVertexForUtils](db).Take()
 			if err != nil {
 				t.Error(err)
 			}
-			result, err := Model[testVertexForUtils](db).ID(model.ID)
+			result, err := driver.Model[testVertexForUtils](db).ID(model.ID)
 			if err != nil {
 				t.Error(err)
 			}
@@ -205,7 +206,7 @@ func TestQuery(t *testing.T) {
 			if err != nil {
 				t.Error(err)
 			}
-			err = Model[testVertexForUtils](db).Update("badField", "badValue")
+			err = driver.Model[testVertexForUtils](db).Update("badField", "badValue")
 			if err == nil {
 				t.Error("Expected error")
 			}
@@ -218,21 +219,21 @@ func TestQuery(t *testing.T) {
 			if err != nil {
 				t.Error(err)
 			}
-			preUpdateModel, err := Model[testVertexForUtils](
+			preUpdateModel, err := driver.Model[testVertexForUtils](
 				db,
 			).Where("name", comparator.EQ, "first").
 				Take()
 			if err != nil {
 				t.Error(err)
 			}
-			err = Model[testVertexForUtils](
+			err = driver.Model[testVertexForUtils](
 				db,
 			).Where("name", comparator.EQ, "first").
 				Update("name", "fourth")
 			if err != nil {
 				t.Error(err)
 			}
-			model, err := Model[testVertexForUtils](
+			model, err := driver.Model[testVertexForUtils](
 				db,
 			).Where("name", comparator.EQ, "fourth").
 				Take()
@@ -257,17 +258,17 @@ func TestQuery(t *testing.T) {
 			if err != nil {
 				t.Error(err)
 			}
-			model, err := Model[testVertexForUtils](db).Where("name", comparator.EQ, "first").Take()
+			model, err := driver.Model[testVertexForUtils](db).Where("name", comparator.EQ, "first").Take()
 			if err != nil {
 				t.Error(err)
 			}
 			model.Name = "fifth"
 			model.Sort = 5
-			err = Save(db, &model)
+			err = driver.Save(db, &model)
 			if err != nil {
 				t.Error(err)
 			}
-			model, err = Model[testVertexForUtils](db).Where("name", comparator.EQ, "fifth").Take()
+			model, err = driver.Model[testVertexForUtils](db).Where("name", comparator.EQ, "fifth").Take()
 			if err != nil {
 				t.Error(err)
 			}
@@ -283,17 +284,17 @@ func TestQuery(t *testing.T) {
 			if err != nil {
 				t.Error(err)
 			}
-			model, err := Model[testVertexForUtils](db).Where("name", comparator.EQ, "first").Take()
+			model, err := driver.Model[testVertexForUtils](db).Where("name", comparator.EQ, "first").Take()
 			if err != nil {
 				t.Error(err)
 			}
 			model.Name = "fifth"
 			model.Sort = 5
-			err = Save(db, &model)
+			err = driver.Save(db, &model)
 			if err != nil {
 				t.Error(err)
 			}
-			model, err = Model[testVertexForUtils](db).Where("name", comparator.EQ, "fifth").Take()
+			model, err = driver.Model[testVertexForUtils](db).Where("name", comparator.EQ, "fifth").Take()
 			if err != nil {
 				t.Error(err)
 			}
@@ -309,12 +310,12 @@ func TestQuery(t *testing.T) {
 			if err != nil {
 				t.Error(err)
 			}
-			models, err := Model[testVertexForUtils](db).Find()
+			models, err := driver.Model[testVertexForUtils](db).Find()
 			if err != nil {
 				t.Error(err)
 			}
 			for _, model := range models {
-				mdl, err := Model[testVertexForUtils](db).IDs(model.ID).Take()
+				mdl, err := driver.Model[testVertexForUtils](db).IDs(model.ID).Take()
 				if err != nil {
 					t.Error(err)
 				}
@@ -331,7 +332,7 @@ func TestQuery(t *testing.T) {
 			if err != nil {
 				t.Error(err)
 			}
-			model := Model[testVertexForUtils](db).AddSubTraversals(
+			model := driver.Model[testVertexForUtils](db).AddSubTraversals(
 				map[string]*gremlingo.GraphTraversal{
 					"subTraversalTest":  gremlingo.T__.Constant("test123"),
 					"subTraversalTest2": gremlingo.T__.Constant(123),
@@ -361,11 +362,11 @@ func TestQuery(t *testing.T) {
 				Vertex: gsmtypes.Vertex{ID: testID.String()},
 				Name:   "test",
 			}
-			err = createVertex(db, &data)
+			err = driver.Create(db, &data)
 			if err != nil {
 				t.Error(err)
 			}
-			model, err := Model[testVertexForUtils](db).ID(testID.String())
+			model, err := driver.Model[testVertexForUtils](db).ID(testID.String())
 			if err != nil {
 				t.Error(err)
 			}
@@ -382,16 +383,16 @@ func TestQuery(t *testing.T) {
 				t.Error(err)
 			}
 
-			results, err := Model[testVertexForUtils](db).Range(0, 10).Find()
+			results, err := driver.Model[testVertexForUtils](db).Range(0, 10).Find()
 			if err != nil {
 				t.Error(err)
 			}
 			if len(results) != len(seededData) {
 				t.Errorf("Expected %d results, got %d", len(seededData), len(results))
 			}
-			results2, err := Model[testVertexForUtils](
+			results2, err := driver.Model[testVertexForUtils](
 				db,
-			).OrderBy(gsmtypes.CreatedAt, Asc).
+			).OrderBy(gsmtypes.CreatedAt, driver.Asc).
 				Range(2, 10).
 				Find()
 			if err != nil {
@@ -410,7 +411,7 @@ func TestQuery(t *testing.T) {
 				t.Error(err)
 			}
 
-			results, err := Model[testVertexForUtils](db).Range(2, 10).Find()
+			results, err := driver.Model[testVertexForUtils](db).Range(2, 10).Find()
 			if err != nil {
 				t.Error(err)
 			}
@@ -425,7 +426,7 @@ func TestQuery(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		results, err := Model[testVertexForUtils](db).Offset(1).Range(0, 10).Find()
+		results, err := driver.Model[testVertexForUtils](db).Offset(1).Range(0, 10).Find()
 		if err != nil {
 			t.Error(err)
 		}
@@ -439,9 +440,9 @@ func TestQuery(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		results, err := Model[testVertexForUtils](db).
+		results, err := driver.Model[testVertexForUtils](db).
 			Where("name", comparator.IN, []any{"first", "third"}).
-			OrderBy("sort", Asc).
+			OrderBy("sort", driver.Asc).
 			Find()
 		if err != nil {
 			t.Error(err)
@@ -463,7 +464,7 @@ func TestQuery(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		results, err := Model[testVertexForUtils](db).
+		results, err := driver.Model[testVertexForUtils](db).
 			Where("name", comparator.WITHOUT, []any{"second"}).
 			Find()
 		if err != nil {
@@ -484,7 +485,7 @@ func TestQuery(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		result, err := Model[testVertexForUtils](db).
+		result, err := driver.Model[testVertexForUtils](db).
 			Where("name", comparator.CONTAINS, "eco").
 			Take()
 		if err != nil {
@@ -500,11 +501,11 @@ func TestQuery(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		model, err := Model[testVertexForUtils](db).Take()
+		model, err := driver.Model[testVertexForUtils](db).Take()
 		if err != nil {
 			t.Error(err)
 		}
-		result, err := Model[testVertexForUtils](db).
+		result, err := driver.Model[testVertexForUtils](db).
 			Where("id", comparator.EQ, model.ID).
 			Take()
 		if err != nil {
@@ -520,8 +521,8 @@ func TestQuery(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		results, err := Model[testVertexForUtils](db).
-			OrderBy("sort", Asc).
+		results, err := driver.Model[testVertexForUtils](db).
+			OrderBy("sort", driver.Asc).
 			Offset(1).
 			Limit(1).
 			Find()
@@ -541,13 +542,13 @@ func TestQuery(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		models, err := Model[testVertexForUtils](db).OrderBy("sort", Asc).Find()
+		models, err := driver.Model[testVertexForUtils](db).OrderBy("sort", driver.Asc).Find()
 		if err != nil {
 			t.Error(err)
 		}
-		results, err := Model[testVertexForUtils](db).
+		results, err := driver.Model[testVertexForUtils](db).
 			IDs(models[0].ID, models[2].ID).
-			OrderBy("sort", Asc).
+			OrderBy("sort", driver.Asc).
 			Find()
 		if err != nil {
 			t.Error(err)

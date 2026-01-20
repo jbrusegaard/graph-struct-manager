@@ -1,6 +1,10 @@
-package driver
+package driver_test
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/jbrusegaard/graph-struct-manager/gremlin/driver"
+)
 
 func TestParseGremlinTag(t *testing.T) {
 	t.Parallel()
@@ -44,15 +48,15 @@ func TestParseGremlinTag(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			opts := parseGremlinTag(tt.tag)
-			if opts.name != tt.wantName {
-				t.Errorf("name should be %s, got %s", tt.wantName, opts.name)
+			opts := driver.ParseGremlinTagForTest(tt.tag)
+			if opts.Name != tt.wantName {
+				t.Errorf("name should be %s, got %s", tt.wantName, opts.Name)
 			}
-			if opts.omitEmpty != tt.wantOmit {
-				t.Errorf("omitEmpty should be %v, got %v", tt.wantOmit, opts.omitEmpty)
+			if opts.OmitEmpty != tt.wantOmit {
+				t.Errorf("omitEmpty should be %v, got %v", tt.wantOmit, opts.OmitEmpty)
 			}
-			if opts.unmapped != tt.wantUnmapped {
-				t.Errorf("unmapped should be %v, got %v", tt.wantUnmapped, opts.unmapped)
+			if opts.Unmapped != tt.wantUnmapped {
+				t.Errorf("unmapped should be %v, got %v", tt.wantUnmapped, opts.Unmapped)
 			}
 		})
 	}

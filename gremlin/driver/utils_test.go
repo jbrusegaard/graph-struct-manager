@@ -1,4 +1,4 @@
-package driver
+package driver_test
 
 import (
 	"slices"
@@ -6,6 +6,7 @@ import (
 	"time"
 
 	gremlingo "github.com/apache/tinkerpop/gremlin-go/v3/driver"
+	"github.com/jbrusegaard/graph-struct-manager/gremlin/driver"
 	"github.com/jbrusegaard/graph-struct-manager/gsmtypes"
 )
 
@@ -66,7 +67,7 @@ func TestUtils(t *testing.T) {
 	t.Run(
 		"GetStructName", func(t *testing.T) {
 			t.Parallel()
-			name, err := getStructName[testVertexForUtils]()
+			name, err := driver.GetStructNameForTest[testVertexForUtils]()
 			if err != nil {
 				t.Errorf("Error getting struct name: %v", err)
 			}
@@ -78,7 +79,7 @@ func TestUtils(t *testing.T) {
 	t.Run(
 		"GetStructNameErr", func(t *testing.T) {
 			t.Parallel()
-			_, err := getStructName[int]()
+			_, err := driver.GetStructNameForTest[int]()
 			if err == nil {
 				t.Errorf("No error getting struct name: %v", err)
 			}
@@ -89,7 +90,7 @@ func TestUtils(t *testing.T) {
 			t.Parallel()
 			var v testVertexForUtils
 			now := time.Now().UTC()
-			err := UnloadGremlinResultIntoStruct(
+			err := driver.UnloadGremlinResultIntoStruct(
 				&v, &gremlingo.Result{
 					Data: map[any]any{
 						"id":            "1",
@@ -122,7 +123,7 @@ func TestUtils(t *testing.T) {
 			t.Parallel()
 			var v testVertexWithExtras
 			now := time.Now().UTC()
-			err := UnloadGremlinResultIntoStruct(
+			err := driver.UnloadGremlinResultIntoStruct(
 				&v, &gremlingo.Result{
 					Data: map[any]any{
 						"id":            "1",
@@ -167,7 +168,7 @@ func TestUtils(t *testing.T) {
 		"TestUnloadGremlinResultIntoStructMultipleExtras", func(t *testing.T) {
 			t.Parallel()
 			var v testVertexWithMultipleExtras
-			err := UnloadGremlinResultIntoStruct(
+			err := driver.UnloadGremlinResultIntoStruct(
 				&v, &gremlingo.Result{
 					Data: map[any]any{
 						"id":      "1",
@@ -191,7 +192,7 @@ func TestUtils(t *testing.T) {
 		"TestUnloadGremlinResultIntoStructInvalidExtrasType", func(t *testing.T) {
 			t.Parallel()
 			var v testVertexWithInvalidExtras
-			err := UnloadGremlinResultIntoStruct(
+			err := driver.UnloadGremlinResultIntoStruct(
 				&v, &gremlingo.Result{
 					Data: map[any]any{
 						"id":      "1",
@@ -212,7 +213,7 @@ func TestUtils(t *testing.T) {
 		"TestUnloadGremlinResultIntoStructSubTraversalPreferred", func(t *testing.T) {
 			t.Parallel()
 			var v testVertexWithSubTraversalPreference
-			err := UnloadGremlinResultIntoStruct(
+			err := driver.UnloadGremlinResultIntoStruct(
 				&v, &gremlingo.Result{
 					Data: map[any]any{
 						"value":     "base",
@@ -284,7 +285,7 @@ func TestUtils(t *testing.T) {
 		t.Run(
 			tt.testName, func(t *testing.T) {
 				t.Parallel()
-				err := UnloadGremlinResultIntoStruct(tt.v, tt.result)
+				err := driver.UnloadGremlinResultIntoStruct(tt.v, tt.result)
 				if (err != nil) != tt.shouldErr {
 					t.Errorf(
 						"UnloadGremlinResultIntoStruct() error = %v, shouldErr %v",
@@ -302,7 +303,7 @@ func TestUtils(t *testing.T) {
 			v := testVertexForUtils{
 				Name: "test",
 			}
-			name, mapValue, err := structToMap(v)
+			name, mapValue, err := driver.StructToMapForTest(v)
 			if err != nil {
 				t.Errorf("Error getting struct name: %v", err)
 			}
@@ -320,7 +321,7 @@ func TestUtils(t *testing.T) {
 			v := testVertexForUtils{
 				Name: "test",
 			}
-			name, mapValue, err := structToMap(&v)
+			name, mapValue, err := driver.StructToMapForTest(&v)
 			if err != nil {
 				t.Errorf("Error getting struct name: %v", err)
 			}
@@ -335,7 +336,7 @@ func TestUtils(t *testing.T) {
 	t.Run(
 		"TestStructToMapPointerError", func(t *testing.T) {
 			t.Parallel()
-			_, _, err := structToMap(1)
+			_, _, err := driver.StructToMapForTest(1)
 			if err == nil {
 				t.Errorf("No error struct to map: %v", err)
 			}
@@ -347,7 +348,7 @@ func TestUtils(t *testing.T) {
 			v := &testVertexWithCustomLabel{
 				Name: "test",
 			}
-			label, mapValue, err := structToMap(v)
+			label, mapValue, err := driver.StructToMapForTest(v)
 			if err != nil {
 				t.Errorf("Error getting struct to map: %v", err)
 			}
@@ -366,7 +367,7 @@ func TestUtils(t *testing.T) {
 			v := &testVertexWithCustomLabel{
 				Name: "test",
 			}
-			label := getLabelFromVertex(v)
+			label := driver.GetLabelFromVertexForTest(v)
 			// Verify custom label is used
 			if label != "customVertexLabel" {
 				t.Errorf("Label should be customVertexLabel, got %s", label)
@@ -379,7 +380,7 @@ func TestUtils(t *testing.T) {
 			v := &testVertexForUtils{
 				Name: "test",
 			}
-			label := getLabelFromVertex(v)
+			label := driver.GetLabelFromVertexForTest(v)
 			// Verify default normalization is used when Label() returns empty
 			if label != "test_vertex_for_utils" {
 				t.Errorf("Label should be test_vertex_for_utils, got %s", label)
@@ -392,7 +393,7 @@ func TestUtils(t *testing.T) {
 			v := &testVertexWithCustomLabel{
 				Name: "test",
 			}
-			label := getLabelFromVertex(v)
+			label := driver.GetLabelFromVertexForTest(v)
 			// Verify custom label is used when passing a pointer
 			if label != "customVertexLabel" {
 				t.Errorf("Label should be customVertexLabel, got %s", label)
@@ -405,7 +406,7 @@ func TestUtils(t *testing.T) {
 			v := &testVertexWithCustomLabel{
 				Name: "test",
 			}
-			label, mapValue, err := structToMap(v)
+			label, mapValue, err := driver.StructToMapForTest(v)
 			if err != nil {
 				t.Errorf("Error getting struct to map: %v", err)
 			}
@@ -435,7 +436,7 @@ func TestUtils(t *testing.T) {
 		t.Run(
 			tt.testName, func(t *testing.T) {
 				t.Parallel()
-				err := validateStructPointerWithAnonymousVertex(tt.v)
+				err := driver.ValidateStructPointerWithAnonymousVertexForTest(tt.v)
 				if (err != nil) != tt.shouldErr {
 					t.Errorf(
 						"validateStructPointerWithAnonymousVertex() error = %v, shouldErr %v",
@@ -456,7 +457,7 @@ func TestUtils(t *testing.T) {
 					"listTest": "1",
 				},
 			}
-			err := UnloadGremlinResultIntoStruct(&test, &data)
+			err := driver.UnloadGremlinResultIntoStruct(&test, &data)
 			if err != nil {
 				t.Errorf("Error unloading struct: %v", err)
 			}
@@ -471,7 +472,7 @@ func TestUtils(t *testing.T) {
 			v := testVertexForUtils{
 				Name: "test",
 			}
-			_, mapValue, err := structToMap(v)
+			_, mapValue, err := driver.StructToMapForTest(v)
 			if err != nil {
 				t.Errorf("Error getting struct to map: %v", err)
 			}
@@ -487,7 +488,7 @@ func TestUtils(t *testing.T) {
 		"TestNilPointerOnUnloadGremlinResultIntoStruct", func(t *testing.T) {
 			t.Parallel()
 			var v *testVertexForUtils
-			err := UnloadGremlinResultIntoStruct(v, &gremlingo.Result{Data: map[any]any{
+			err := driver.UnloadGremlinResultIntoStruct(v, &gremlingo.Result{Data: map[any]any{
 				"something": "test",
 			}})
 			if err == nil {
@@ -499,7 +500,7 @@ func TestUtils(t *testing.T) {
 		"TestNilResultUnloadGremlinResultIntoStruct", func(t *testing.T) {
 			t.Parallel()
 			var v testVertexForUtils
-			err := UnloadGremlinResultIntoStruct(v, nil)
+			err := driver.UnloadGremlinResultIntoStruct(v, nil)
 			if err == nil {
 				t.Errorf("Error should not be nil")
 			}

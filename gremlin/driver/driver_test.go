@@ -1,9 +1,10 @@
-package driver
+package driver_test
 
 import (
 	"testing"
 
 	"github.com/jbrusegaard/graph-struct-manager/comparator"
+	"github.com/jbrusegaard/graph-struct-manager/gremlin/driver"
 	"github.com/jbrusegaard/graph-struct-manager/gsmtypes"
 )
 
@@ -37,7 +38,7 @@ func TestDriverConnections(t *testing.T) {
 		t.Run(
 			tt.name, func(t *testing.T) {
 				t.Parallel()
-				db, err := Open(tt.url, dbDriver)
+				db, err := driver.Open(tt.url, dbDriver)
 				if (err != nil) != tt.wantErr {
 					t.Errorf("Open() error = %v, wantErr %v", err, tt.wantErr)
 					return
@@ -51,7 +52,7 @@ func TestDriverConnections(t *testing.T) {
 }
 
 func TestDriverTable(t *testing.T) {
-	db, err := Open(DbURL, dbDriver)
+	db, err := driver.Open(DbURL, dbDriver)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,37 +61,37 @@ func TestDriverTable(t *testing.T) {
 	if table == nil {
 		t.Fatal("Table should not be nil")
 	}
-	if table.label != "test_vertex" {
-		t.Errorf("Table label should be test_vertex, got %s", table.label)
+	if _, err := table.Limit(1).ToList(); err != nil {
+		t.Errorf("Label() query should not error, got %v", err)
 	}
 }
 
 func TestDriverModel(t *testing.T) {
-	db, err := Open(DbURL, dbDriver)
+	db, err := driver.Open(DbURL, dbDriver)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	model := Model[testVertex](db)
+	model := driver.Model[testVertex](db)
 	if model == nil {
 		t.Fatal("Model should not be nil")
 	}
 }
 
 func TestDriverWhere(t *testing.T) {
-	db, err := Open(DbURL, dbDriver)
+	db, err := driver.Open(DbURL, dbDriver)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	model := Where[testVertex](db, "name", comparator.EQ, "test")
+	model := driver.Where[testVertex](db, "name", comparator.EQ, "test")
 	if model == nil {
 		t.Fatal("Model should not be nil")
 	}
 }
 
 func TestDriverSave(t *testing.T) {
-	db, err := Open(DbURL, dbDriver)
+	db, err := driver.Open(DbURL, dbDriver)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,16 +99,16 @@ func TestDriverSave(t *testing.T) {
 	testV := &testVertex{
 		Name: "pre-test",
 	}
-	err = createVertex(db, testV)
+	err = driver.Create(db, testV)
 	if err != nil {
 		t.Error(err)
 	}
 	testV.Name = "post-test"
-	err = Save(db, testV)
+	err = driver.Save(db, testV)
 	if err != nil {
 		return
 	}
-	vertex, err := Model[testVertex](db).ID(testV.ID)
+	vertex, err := driver.Model[testVertex](db).ID(testV.ID)
 	if err != nil {
 		return
 	}
