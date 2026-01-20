@@ -193,11 +193,13 @@ Hooks receive the `*GremlinDriver` used for the operation and can abort by retur
 - `AfterCreate(db *GremlinDriver) error`
 - `BeforeUpdate(db *GremlinDriver) error`
 - `AfterUpdate(db *GremlinDriver) error`
+- `AfterFind(db *GremlinDriver) error`
 
 **Order of execution:**
 - `Create` calls `BeforeCreate`, writes the vertex, sets `ID/CreatedAt/LastModified`, then `AfterCreate`.
 - `Update` calls `BeforeUpdate`, writes the changes, updates `LastModified`, then `AfterUpdate`.
 - `Save` dispatches to `Create` or `Update` based on whether `ID` is set.
+- `Find`/`Take`/`ID` call `AfterFind` on each loaded vertex before returning.
 
 **Example:**
 ```go

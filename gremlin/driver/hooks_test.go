@@ -1,6 +1,7 @@
 package driver
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/jbrusegaard/graph-struct-manager/gsmtypes"
@@ -60,6 +61,31 @@ func (v *hookUpdateVertex) AfterUpdate(db *GremlinDriver) error {
 	v.afterHadID = v.ID != nil
 	v.afterHadModifiedAt = !v.LastModified.IsZero()
 	return nil
+}
+
+type hookFindVertex struct {
+	gsmtypes.Vertex
+	Name     string `json:"name" gremlin:"name"`
+	HookNote string `json:"hook_note" gremlin:"hook_note"`
+
+	afterFindCalled bool
+	afterDriver     *GremlinDriver
+}
+
+func (v *hookFindVertex) AfterFind(db *GremlinDriver) error {
+	v.afterFindCalled = true
+	v.afterDriver = db
+	v.HookNote = "after-find"
+	return nil
+}
+
+type hookFindErrorVertex struct {
+	gsmtypes.Vertex
+	Name string `json:"name" gremlin:"name"`
+}
+
+func (v *hookFindErrorVertex) AfterFind(db *GremlinDriver) error {
+	return fmt.Errorf("after find failed")
 }
 
 func TestCreateHooksCreate(t *testing.T) {
@@ -138,5 +164,78 @@ func TestUpdateHooksUpdate(t *testing.T) {
 	}
 	if loaded.Name != "hook-test-updated" {
 		t.Errorf("expected updated name, got %s", loaded.Name)
+	}
+}
+
+func TestAfterFindHooks(t *testing.T) {
+	db, err := Open(DbURL, dbDriver)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	t.Cleanup(cleanDB)
+
+	vertices := []hookFindVertex{
+		{Name: "hook-find-1"},
+		{Name: "hook-find-2"},
+	}
+	for i := range vertices {
+		if err := Create(db, &vertices[i]); err != nil {
+			t.Fatalf("Create() error = %v", err)
+		}
+	}
+
+	results, err := Model[hookFindVertex](db).Find()
+	if err != nil {
+		t.Fatalf("Find() error = %v", err)
+	}
+	if len(results) != len(vertices) {
+		t.Fatalf("expected %d results, got %d", len(vertices), len(results))
+	}
+	for _, result := range results {
+		if !result.afterFindCalled {
+			t.Error("expected AfterFind to be called for Find() result")
+		}
+		if result.afterDriver != db {
+			t.Error("expected AfterFind to receive the same driver instance")
+		}
+		if result.HookNote != "after-find" {
+			t.Errorf("expected hook note to be set, got %s", result.HookNote)
+		}
+	}
+
+	taken, err := Model[hookFindVertex](db).Take()
+	if err != nil {
+		t.Fatalf("Take() error = %v", err)
+	}
+	if !taken.afterFindCalled || taken.HookNote != "after-find" {
+		t.Error("expected AfterFind to run for Take()")
+	}
+
+	found, err := Model[hookFindVertex](db).ID(vertices[0].ID)
+	if err != nil {
+		t.Fatalf("ID() error = %v", err)
+	}
+	if !found.afterFindCalled || found.HookNote != "after-find" {
+		t.Error("expected AfterFind to run for ID()")
+	}
+}
+
+func TestAfterFindHookError(t *testing.T) {
+	db, err := Open(DbURL, dbDriver)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	t.Cleanup(cleanDB)
+
+	vertex := hookFindErrorVertex{Name: "hook-find-error"}
+	if err := Create(db, &vertex); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	_, err = Model[hookFindErrorVertex](db).Take()
+	if err == nil {
+		t.Fatal("expected AfterFind error to be returned")
 	}
 }
