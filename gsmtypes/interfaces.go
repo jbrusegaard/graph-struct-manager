@@ -6,6 +6,9 @@ type VertexType interface {
 	GetVertexID() any
 	GetVertexLastModified() time.Time
 	GetVertexCreatedAt() time.Time
+	SetVertexID(id any)
+	SetVertexLastModified(time.Time)
+	SetVertexCreatedAt(time.Time)
 	Label() string
 }
 

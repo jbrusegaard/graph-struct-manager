@@ -11,7 +11,7 @@ import (
 )
 
 type testVertexForUtils struct {
-	gsmtypes.Vertex
+	*gsmtypes.Vertex
 	Name              string            `json:"name"          gremlin:"name"`
 	Ignore            string            `json:"-"             gremlin:"-"`
 	ListTest          []string          `json:"listTest"      gremlin:"listTest"`
@@ -24,36 +24,36 @@ type testVertexForUtils struct {
 }
 
 type testVertexWithNumSlice struct {
-	gsmtypes.Vertex
+	*gsmtypes.Vertex
 	ListInts []int `json:"listInts" gremlin:"listInts"`
 }
 
 type testVertexWithCustomLabel struct {
-	gsmtypes.Vertex
+	*gsmtypes.Vertex
 	Name string `json:"name" gremlin:"name"`
 }
 
 type testVertexWithExtras struct {
-	gsmtypes.Vertex
+	*gsmtypes.Vertex
 	Name   string         `json:"name"   gremlin:"name"`
 	Extras map[string]any `json:"extras" gremlin:"-,unmapped"`
 }
 
 type testVertexWithMultipleExtras struct {
-	gsmtypes.Vertex
+	*gsmtypes.Vertex
 	Name     string         `json:"name"     gremlin:"name"`
 	Extras   map[string]any `json:"extras"   gremlin:"-,unmapped"`
 	ExtrasV2 map[string]any `json:"extrasV2" gremlin:"-,unmapped"`
 }
 
 type testVertexWithInvalidExtras struct {
-	gsmtypes.Vertex
+	*gsmtypes.Vertex
 	Name   string            `json:"name"   gremlin:"name"`
 	Extras map[string]string `json:"extras" gremlin:"-,unmapped"`
 }
 
 type testVertexWithSubTraversalPreference struct {
-	gsmtypes.Vertex
+	*gsmtypes.Vertex
 	Value string `json:"value" gremlin:"value" gremlinSubTraversal:"value_sub"`
 }
 

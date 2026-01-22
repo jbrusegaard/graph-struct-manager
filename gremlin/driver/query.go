@@ -90,9 +90,11 @@ type OrderCondition struct {
 
 func getLabel[T gsmtypes.VertexType]() (string, error) {
 	var v T
-	// Use getLabelFromValue to support both pointer and value receivers
-	label := getLabelFromVertex(v)
-	return label, nil
+	// Prefer pointer receiver Label implementations when available.
+	if vertex, ok := any(&v).(gsmtypes.VertexType); ok {
+		return getLabelFromVertex(vertex), nil
+	}
+	return getLabelFromVertex(v), nil
 }
 
 // NewQuery creates a new query builder for type T

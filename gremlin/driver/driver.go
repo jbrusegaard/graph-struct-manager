@@ -1,6 +1,7 @@
 package driver
 
 import (
+	"errors"
 	"fmt"
 
 	gremlingo "github.com/apache/tinkerpop/gremlin-go/v3/driver"
@@ -71,7 +72,11 @@ func (driver *GremlinDriver) Label(label string) *RawQuery {
 }
 
 func Save[T gsmtypes.VertexType](driver *GremlinDriver, v *T) error {
-	if (*v).GetVertexID() == nil {
+	vertex, ok := any(v).(gsmtypes.VertexType)
+	if !ok {
+		return errors.New("value must implement gsmtypes.VertexType")
+	}
+	if vertex.GetVertexID() == nil {
 		return Create(driver, v)
 	}
 	return Update(driver, v)

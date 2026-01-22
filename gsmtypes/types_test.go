@@ -31,4 +31,17 @@ func TestTypes(t *testing.T) {
 	if vertex.LastModified != (time.Time{}) {
 		t.Errorf("Vertex LastModified should be 0, got %v", vertex.LastModified)
 	}
+	now := time.Now().UTC()
+	vertex.SetVertexID("2")
+	vertex.SetVertexLastModified(now)
+	vertex.SetVertexCreatedAt(now)
+	if vertex.ID != "2" {
+		t.Errorf("Vertex ID should be 2, got %s", vertex.ID)
+	}
+	if vertex.LastModified != now {
+		t.Errorf("Vertex LastModified should be %v, got %v", now, vertex.LastModified)
+	}
+	if vertex.CreatedAt != now {
+		t.Errorf("Vertex CreatedAt should be %v, got %v", now, vertex.CreatedAt)
+	}
 }

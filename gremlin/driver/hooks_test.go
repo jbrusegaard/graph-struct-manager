@@ -9,7 +9,7 @@ import (
 )
 
 type hookCreateVertex struct {
-	gsmtypes.Vertex
+	*gsmtypes.Vertex
 	Name     string `json:"name" gremlin:"name"`
 	HookNote string `json:"hook_note" gremlin:"hook_note"`
 
@@ -37,7 +37,7 @@ func (v *hookCreateVertex) AfterCreate(db *driver.GremlinDriver) error {
 }
 
 type hookUpdateVertex struct {
-	gsmtypes.Vertex
+	*gsmtypes.Vertex
 	Name     string `json:"name" gremlin:"name"`
 	HookNote string `json:"hook_note" gremlin:"hook_note"`
 
@@ -65,7 +65,7 @@ func (v *hookUpdateVertex) AfterUpdate(db *driver.GremlinDriver) error {
 }
 
 type hookFindVertex struct {
-	gsmtypes.Vertex
+	*gsmtypes.Vertex
 	Name     string `json:"name" gremlin:"name"`
 	HookNote string `json:"hook_note" gremlin:"hook_note"`
 
@@ -81,7 +81,7 @@ func (v *hookFindVertex) AfterFind(db *driver.GremlinDriver) error {
 }
 
 type hookFindErrorVertex struct {
-	gsmtypes.Vertex
+	*gsmtypes.Vertex
 	Name string `json:"name" gremlin:"name"`
 }
 

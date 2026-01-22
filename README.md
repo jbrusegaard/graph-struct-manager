@@ -28,7 +28,7 @@ A type-safe, chainable query builder for Gremlin graph databases in Go. This ORM
 
 ## Overview
 
-The query builder uses Go generics to provide type-safe operations on vertex types that implement the `VertexType` interface. All functions are chainable, allowing for fluent query construction.
+The query builder uses Go generics to provide type-safe operations on vertex types that implement the `VertexType` interface (getters/setters for ID and timestamps plus `Label()`). All functions are chainable, allowing for fluent query construction.
 
 ## Requirements
 
@@ -38,15 +38,36 @@ The query builder uses Go generics to provide type-safe operations on vertex typ
 ## Setup
 
 First, define your vertex struct with the required gremlin tags shown below. By default, the vertex label will be your struct name converted to lower snake case. So for this example the created vertex label would be `test_vertex`.
-The GSM expects that types.Vertex will be set as an anonymous struct on the struct in which you are creating a vertex.
+The simplest option is to embed `*gsmtypes.Vertex` anonymously to satisfy `VertexType` with pointer receiver methods. The driver will initialize the embedded pointer if it is nil.
 ```go
 type TestVertex struct {
-    types.Vertex                               // Anonymous embedding required
+    *gsmtypes.Vertex                           // Anonymous embedding (recommended)
     Name        string   `gremlin:"name"`      // Field with gremlin tag
     Age         int      `gremlin:"age"`
     Email       string   `gremlin:"email"`
     Tags        []string `gremlin:"tags"`
 }
+```
+
+### Implementing VertexType without embedding
+
+If you do not want to embed `gsmtypes.Vertex`, implement the full `VertexType` interface yourself. The driver uses the setter methods to populate ID and timestamps, so you can store them under any field names you prefer. You still need `gremlin` tags for any fields you want persisted.
+
+```go
+type User struct {
+    ID           any       `gremlin:"id"`
+    ModifiedAt   time.Time `gremlin:"last_modified"`
+    CreatedOn    time.Time `gremlin:"created_at"`
+    Name         string    `gremlin:"name"`
+}
+
+func (u *User) GetVertexID() any                 { return u.ID }
+func (u *User) GetVertexLastModified() time.Time { return u.ModifiedAt }
+func (u *User) GetVertexCreatedAt() time.Time    { return u.CreatedOn }
+func (u *User) SetVertexID(id any)               { u.ID = id }
+func (u *User) SetVertexLastModified(t time.Time) { u.ModifiedAt = t }
+func (u *User) SetVertexCreatedAt(t time.Time)   { u.CreatedOn = t }
+func (u *User) Label() string                    { return "" }
 ```
 
 ### Capturing unmapped properties
@@ -56,7 +77,7 @@ them, add a map field tagged with `gremlin:"-,unmapped"`.
 
 ```go
 type User struct {
-    types.Vertex
+    *gsmtypes.Vertex
     Name   string         `gremlin:"name"`
     Email  string         `gremlin:"email"`
     Extras map[string]any `gremlin:"-,unmapped"`
@@ -74,7 +95,7 @@ The `omitempty` option can be added to gremlin tags to skip fields with zero val
 **Syntax:**
 ```go
 type User struct {
-    types.Vertex
+    *gsmtypes.Vertex
     Name        string  `gremlin:"name"`                    // Always included
     Email       string  `gremlin:"email,omitempty"`         // Omit if empty string
     Age         int     `gremlin:"age,omitempty"`           // Omit if zero
@@ -121,7 +142,7 @@ You can provide a custom label for your vertex by implementing the `Label()` met
 **Example with custom label:**
 ```go
 type User struct {
-    types.Vertex
+    *gsmtypes.Vertex
     Name  string `gremlin:"name"`
     Email string `gremlin:"email"`
 }
@@ -153,7 +174,7 @@ By default, the graph database automatically generates unique IDs for new vertic
 **Example with custom ID:**
 ```go
 type User struct {
-    types.Vertex
+    *gsmtypes.Vertex
     Name  string `gremlin:"name"`
     Email string `gremlin:"email"`
 }
@@ -204,7 +225,7 @@ Hooks receive the `*GremlinDriver` used for the operation and can abort by retur
 **Example:**
 ```go
 type User struct {
-    types.Vertex
+    *gsmtypes.Vertex
     Name   string `gremlin:"name"`
     Status string `gremlin:"status"`
 }
@@ -390,7 +411,7 @@ func (q *Query[T]) AddSubTraversal(gremlinTag string, traversal *gremlingo.Graph
 ```go
 // Define a struct with a field that will be populated by a subtraversal
 type User struct {
-    types.Vertex
+    *gsmtypes.Vertex
     Name        string   `gremlin:"name"`
     Email       string   `gremlin:"email"`
     FriendCount int      `gremlinSubTraversal:"friend_count"`  // Will be populated by subtraversal
@@ -418,7 +439,7 @@ user, err := GSM.Model[User](db).
 
 // Complex subtraversal - get average age of friends
 type UserWithStats struct {
-    types.Vertex
+    *gsmtypes.Vertex
     Name           string  `gremlin:"name"`
     AvgFriendAge   float64 `gremlinSubTraversal:"avg_friend_age"`  // Populated by subtraversal
 }

@@ -101,12 +101,27 @@ func recursivelyUnloadIntoStruct(
 		fieldType := rt.Field(i)
 		// handle anonymous Vertex field
 		if fieldType.Anonymous {
-			recursivelyUnloadIntoStruct(
-				field.Addr().Interface(),
-				stringMap,
-				usedKeys,
-				extrasFields,
-			)
+			switch field.Kind() {
+			case reflect.Ptr:
+				if field.IsNil() && field.CanSet() && field.Type().Elem().Kind() == reflect.Struct {
+					field.Set(reflect.New(field.Type().Elem()))
+				}
+				if !field.IsNil() {
+					recursivelyUnloadIntoStruct(
+						field.Interface(),
+						stringMap,
+						usedKeys,
+						extrasFields,
+					)
+				}
+			case reflect.Struct:
+				recursivelyUnloadIntoStruct(
+					field.Addr().Interface(),
+					stringMap,
+					usedKeys,
+					extrasFields,
+				)
+			}
 		}
 
 		unloadFieldFromResult(
@@ -297,18 +312,35 @@ func structToMap( //nolint:gocognit
 		field := rt.Field(i)
 		fieldValue := rv.Field(i)
 
-		if field.Anonymous && fieldValue.Kind() == reflect.Struct {
-			// Recursively process the anonymous struct
-			_, anonymousMap, structMapErr := structToMap(fieldValue.Interface())
-			if structMapErr != nil {
-				return "", nil, fmt.Errorf(
-					"error processing anonymous field %s: %w",
-					field.Name,
-					err,
-				)
+		if field.Anonymous {
+			switch fieldValue.Kind() {
+			case reflect.Struct:
+				// Recursively process the anonymous struct
+				_, anonymousMap, structMapErr := structToMap(fieldValue.Interface())
+				if structMapErr != nil {
+					return "", nil, fmt.Errorf(
+						"error processing anonymous field %s: %w",
+						field.Name,
+						err,
+					)
+				}
+				maps.Copy(mapValue, anonymousMap)
+				continue
+			case reflect.Ptr:
+				if fieldValue.IsNil() || fieldValue.Elem().Kind() != reflect.Struct {
+					continue
+				}
+				_, anonymousMap, structMapErr := structToMap(fieldValue.Interface())
+				if structMapErr != nil {
+					return "", nil, fmt.Errorf(
+						"error processing anonymous field %s: %w",
+						field.Name,
+						err,
+					)
+				}
+				maps.Copy(mapValue, anonymousMap)
+				continue
 			}
-			maps.Copy(mapValue, anonymousMap)
-			continue
 		}
 
 		// Skip sub traversal tags so this doesnt get included when creating vertices
@@ -372,20 +404,32 @@ func validateStructPointerWithAnonymousVertex(value any) error {
 	if rv.Elem().Kind() != reflect.Struct {
 		return errors.New("value must point to a struct")
 	}
+	if _, ok := value.(gsmtypes.VertexType); !ok {
+		return errors.New("value must implement gsmtypes.VertexType")
+	}
 
 	// Get the struct type
 	rt := rv.Elem().Type()
 
+	vertexType := reflect.TypeFor[gsmtypes.Vertex]()
+	vertexPtrType := reflect.TypeFor[*gsmtypes.Vertex]()
 	// Check for anonymous Vertex field
 	for i := range rv.Elem().NumField() {
 		field := rt.Field(i)
-
-		if field.Anonymous && field.Type == reflect.TypeFor[gsmtypes.Vertex]() {
-			return nil
+		if !field.Anonymous {
+			continue
+		}
+		switch field.Type {
+		case vertexType:
+			continue
+		case vertexPtrType:
+			fieldValue := rv.Elem().Field(i)
+			if fieldValue.CanSet() && fieldValue.IsNil() {
+				fieldValue.Set(reflect.New(vertexType))
+			}
 		}
 	}
-
-	return errors.New("struct must contain anonymous types.Vertex field")
+	return nil
 }
 
 func getStructFieldNameAndType[T any](tag string) (string, reflect.Type, error) {

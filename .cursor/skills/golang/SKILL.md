@@ -23,7 +23,8 @@ Gremlin traversals.
 
 ## Graph Model Conventions
 
-- Vertex structs must embed `gsmtypes.Vertex` anonymously; `Create`/`Update` validate this.
+- Vertex structs typically embed `*gsmtypes.Vertex` anonymously, or implement `gsmtypes.VertexType`
+  (getters/setters) directly; `Create`/`Update` validate pointer + interface support.
 - Edge structs (when used) embed `gsmtypes.Edge` and implement `gsmtypes.EdgeType`.
 - Use `gremlin:"field_name"` tags for properties; `gremlin:"field_name,omitempty"` skips
   zero values and nil pointers during create/update.

@@ -13,10 +13,49 @@ type Vertex struct {
 	CreatedAt    time.Time `json:"created_at"    gremlin:"created_at"`
 }
 
-func (v Vertex) GetVertexID() any                 { return v.ID }
-func (v Vertex) GetVertexLastModified() time.Time { return v.LastModified }
-func (v Vertex) GetVertexCreatedAt() time.Time    { return v.CreatedAt }
-func (v Vertex) Label() string {
+func (v *Vertex) GetVertexID() any {
+	if v == nil {
+		return nil
+	}
+	return v.ID
+}
+
+func (v *Vertex) GetVertexLastModified() time.Time {
+	if v == nil {
+		return time.Time{}
+	}
+	return v.LastModified
+}
+
+func (v *Vertex) GetVertexCreatedAt() time.Time {
+	if v == nil {
+		return time.Time{}
+	}
+	return v.CreatedAt
+}
+
+func (v *Vertex) SetVertexID(id any) {
+	if v == nil {
+		return
+	}
+	v.ID = id
+}
+
+func (v *Vertex) SetVertexLastModified(lastModified time.Time) {
+	if v == nil {
+		return
+	}
+	v.LastModified = lastModified
+}
+
+func (v *Vertex) SetVertexCreatedAt(createdAt time.Time) {
+	if v == nil {
+		return
+	}
+	v.CreatedAt = createdAt
+}
+
+func (v *Vertex) Label() string {
 	// Default implementation returns empty string
 	// The driver will use struct name normalization when Label() returns empty
 	return ""

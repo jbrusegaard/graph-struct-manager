@@ -9,7 +9,7 @@ import (
 )
 
 type testVertex struct {
-	gsmtypes.Vertex
+	*gsmtypes.Vertex
 	Name string `json:"name" gremlin:"name"`
 }
 

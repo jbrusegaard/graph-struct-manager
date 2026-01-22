@@ -23,6 +23,10 @@ func updateVertex[T gsmtypes.VertexType](db *GremlinDriver, value *T) error {
 		db.logger.Errorf("Validation failed: %v", err)
 		return err
 	}
+	vertex, ok := any(value).(gsmtypes.VertexType)
+	if !ok {
+		return errors.New("value must implement gsmtypes.VertexType")
+	}
 	err = runBeforeUpdateHook(db, value)
 	if err != nil {
 		return err
@@ -32,12 +36,12 @@ func updateVertex[T gsmtypes.VertexType](db *GremlinDriver, value *T) error {
 	if err != nil {
 		return err
 	}
-	if mapValue["id"] == nil {
+	id := vertex.GetVertexID()
+	if id == nil {
 		return errors.New(
 			"invalid update operation value does not contain id field or id was not set",
 		)
 	}
-	id := mapValue["id"]
 	delete(mapValue, "id")
 	mapValue[gsmtypes.LastModified] = now
 	query := db.g.V(id)
@@ -46,8 +50,7 @@ func updateVertex[T gsmtypes.VertexType](db *GremlinDriver, value *T) error {
 	if err != nil {
 		return err
 	}
-	reflectNow := reflect.ValueOf(now)
-	reflect.ValueOf(value).Elem().FieldByName("LastModified").Set(reflectNow)
+	vertex.SetVertexLastModified(now)
 	return runAfterUpdateHook(db, value)
 }
 
@@ -56,6 +59,10 @@ func createVertex[T gsmtypes.VertexType](db *GremlinDriver, value *T) error {
 	if err != nil {
 		db.logger.Errorf("Validation failed: %v", err)
 		return err
+	}
+	vertex, ok := any(value).(gsmtypes.VertexType)
+	if !ok {
+		return errors.New("value must implement gsmtypes.VertexType")
 	}
 	err = runBeforeCreateHook(db, value)
 	if err != nil {
@@ -66,16 +73,13 @@ func createVertex[T gsmtypes.VertexType](db *GremlinDriver, value *T) error {
 	if err != nil {
 		return err
 	}
-	id, hasID := mapValue["id"]
+	id := vertex.GetVertexID()
 	delete(mapValue, "id")
-	if !hasID || id == nil {
-		hasID = false
-	}
 	mapValue[gsmtypes.LastModified] = now
 	mapValue[gsmtypes.CreatedAt] = now
 	query := db.g.AddV(label)
 	query = handlePropertyUpdate(db, mapValue, query)
-	if hasID && id != nil {
+	if id != nil {
 		query = query.Property(gremlingo.T.Id, id)
 	}
 	vertexID, err := query.Id().Next()
@@ -83,15 +87,11 @@ func createVertex[T gsmtypes.VertexType](db *GremlinDriver, value *T) error {
 		return err
 	}
 	// Check if ID was pre-set or if generated add it to struct
-	if !hasID {
-		reflect.ValueOf(value).
-			Elem().
-			FieldByName("ID").
-			Set(reflect.ValueOf(vertexID.GetInterface()))
+	if id == nil {
+		vertex.SetVertexID(vertexID.GetInterface())
 	}
-	reflectNow := reflect.ValueOf(now)
-	reflect.ValueOf(value).Elem().FieldByName("LastModified").Set(reflectNow)
-	reflect.ValueOf(value).Elem().FieldByName("CreatedAt").Set(reflectNow)
+	vertex.SetVertexLastModified(now)
+	vertex.SetVertexCreatedAt(now)
 	return runAfterCreateHook(db, value)
 }
 

@@ -359,7 +359,7 @@ func TestQuery(t *testing.T) {
 				t.Error(err)
 			}
 			data := testVertexForUtils{
-				Vertex: gsmtypes.Vertex{ID: testID.String()},
+				Vertex: &gsmtypes.Vertex{ID: testID.String()},
 				Name:   "test",
 			}
 			err = driver.Create(db, &data)
@@ -392,7 +392,7 @@ func TestQuery(t *testing.T) {
 			}
 			results2, err := driver.Model[testVertexForUtils](
 				db,
-			).OrderBy(gsmtypes.CreatedAt, driver.Asc).
+			).OrderBy("sort", driver.Asc).
 				Range(2, 10).
 				Find()
 			if err != nil {
