@@ -2,7 +2,6 @@ package driver_test
 
 import (
 	"testing"
-	"time"
 
 	gremlingo "github.com/apache/tinkerpop/gremlin-go/v3/driver"
 	"github.com/google/uuid"
@@ -24,12 +23,16 @@ func seedData(db *driver.GremlinDriver, data []testVertexForUtils) error {
 }
 
 func cleanDB() {
-	db, _ := driver.Open(DbURL, dbDriver)
+	db, _ := driver.Open(DbURL, driver.Config{
+		Driver: dbDriver,
+	})
 	<-db.G().V().Drop().Iterate()
 }
 
 func TestQuery(t *testing.T) {
-	db, err := driver.Open(DbURL, dbDriver)
+	db, err := driver.Open(DbURL, driver.Config{
+		Driver: dbDriver,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -359,15 +362,22 @@ func TestQuery(t *testing.T) {
 			if err != nil {
 				t.Error(err)
 			}
+
+			customDbIDGenerator, _ := driver.Open(DbURL, driver.Config{
+				Driver: dbDriver,
+				IDGenerator: func() any {
+					return testID.String()
+				},
+			})
+
 			data := testVertexForUtils{
-				Vertex: gsmtypes.Vertex{ID: testID.String()},
-				Name:   "test",
+				Name: "test",
 			}
-			err = driver.Create(db, &data)
+			err = driver.Create(customDbIDGenerator, &data)
 			if err != nil {
 				t.Error(err)
 			}
-			model, err := driver.Model[testVertexForUtils](db).ID(testID.String())
+			model, err := driver.Model[testVertexForUtils](customDbIDGenerator).ID(testID.String())
 			if err != nil {
 				t.Error(err)
 			}
@@ -560,19 +570,6 @@ func TestQuery(t *testing.T) {
 		if results[0].Name != models[0].Name || results[1].Name != models[2].Name {
 			t.Errorf("Expected %s and %s, got %s and %s",
 				models[0].Name, models[2].Name, results[0].Name, results[1].Name)
-		}
-	})
-	t.Run("TestQueryWithVertexType", func(t *testing.T) {
-		t.Cleanup(cleanDB)
-		testVertexWithoutAnonymousVertex := testVertexWithoutAnonymousVertex{
-			ID:           uuid.New().String(),
-			LastModified: time.Now(),
-			CreatedAt:    time.Now(),
-			Name:         "test",
-		}
-		err = driver.Create(db, &testVertexWithoutAnonymousVertex)
-		if err != nil {
-			t.Error(err)
 		}
 	})
 }

@@ -7,6 +7,9 @@ A type-safe, chainable query builder for Gremlin graph databases in Go. This ORM
 - [Overview](#overview)
 - [Setup](#setup)
   - [Custom Labels](#custom-labels)
+- [Database Configuration](#database-configuration)
+  - [Database Driver Types](#database-driver-types)
+  - [Custom ID Generator](#custom-id-generator)
 - [Hooks](#hooks)
 - [Environment Variables](#environment-variables)
 - [Query Builder Functions](#query-builder-functions)
@@ -249,6 +252,111 @@ if err != nil {
 }
 defer db.Close()
 ```
+
+## Database Configuration
+
+The `Open` function accepts an optional configuration parameter that allows you to customize the database driver behavior. You can specify the database driver type and provide a custom ID generator function.
+
+### Configuration Options
+
+```go
+type Config struct {
+    Driver      DatabaseDriver  // Database driver type (Gremlin or Neptune)
+    IDGenerator func() any      // Custom ID generator function
+}
+```
+
+### Database Driver Types
+
+GraphStructManager supports multiple database backends:
+
+- **`driver.Gremlin`** (default) - Standard Apache TinkerPop Gremlin Server
+- **`driver.Neptune`** - AWS Neptune with Neptune-specific optimizations for handling slices and maps
+
+**Example:**
+
+```go
+// Connect with default Gremlin driver
+db, err := driver.Open("ws://localhost:8182")
+
+// Connect with explicit Gremlin driver
+db, err := driver.Open("ws://localhost:8182", driver.Config{
+    Driver: driver.Gremlin,
+})
+
+// Connect to AWS Neptune
+db, err := driver.Open("wss://your-neptune-endpoint:8182", driver.Config{
+    Driver: driver.Neptune,
+})
+```
+
+**When to specify the driver:**
+- Use `driver.Gremlin` for standard TinkerPop Gremlin Server, JanusGraph, or other Gremlin-compatible databases
+- Use `driver.Neptune` when connecting to AWS Neptune to enable Neptune-specific property handling for collections
+
+### Custom ID Generator
+
+By default, the graph database automatically generates unique IDs for new vertices. You can provide a custom ID generator function in the configuration to control how IDs are generated for all vertices created through the driver.
+
+**Signature:**
+```go
+IDGenerator func() any
+```
+
+The function should return a unique identifier of any type supported by your graph database (string, int, UUID, etc.).
+
+**Examples:**
+
+```go
+import (
+    "github.com/google/uuid"
+    "github.com/jbrusegaard/graph-struct-manager/gremlin/driver"
+)
+
+// Use UUID v4 for all new vertices
+db, err := driver.Open("ws://localhost:8182", driver.Config{
+    IDGenerator: func() any {
+        return uuid.New().String()
+    },
+})
+
+// Use custom prefixed IDs
+var counter int64
+db, err := driver.Open("ws://localhost:8182", driver.Config{
+    IDGenerator: func() any {
+        counter++
+        return fmt.Sprintf("vertex-%d", counter)
+    },
+})
+
+// Use timestamp-based IDs
+db, err := driver.Open("ws://localhost:8182", driver.Config{
+    IDGenerator: func() any {
+        return time.Now().UnixNano()
+    },
+})
+
+// Combine driver type and ID generator
+db, err := driver.Open("wss://neptune-endpoint:8182", driver.Config{
+    Driver: driver.Neptune,
+    IDGenerator: func() any {
+        return uuid.New().String()
+    },
+})
+```
+
+**When to use a custom ID generator:**
+- When you need consistent ID formats across all vertices (e.g., all UUIDs)
+- When integrating with external systems that expect specific ID schemes
+- When you want readable or predictable IDs for debugging
+- When implementing distributed systems that require globally unique IDs
+
+**Important notes:**
+- The ID generator is called for every `Create` operation
+- The function must return unique values to avoid conflicts
+- If `IDGenerator` is `nil` (default), the database will auto-generate IDs
+- The generator function should be thread-safe if used in concurrent environments
+- Individual vertices can still override the ID by setting the `ID` field before calling `Create` (see [Custom IDs](#custom-ids) section)
 
 ## Environment Variables
 
