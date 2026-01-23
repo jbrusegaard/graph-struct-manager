@@ -90,7 +90,11 @@ func (v *hookFindErrorVertex) AfterFind(db *driver.GremlinDriver) error {
 }
 
 func TestCreateHooksCreate(t *testing.T) {
-	db, err := driver.Open(DbURL, dbDriver)
+	db, err := driver.Open(
+		DbURL, driver.Config{
+			Driver: dbDriver,
+		},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,7 +129,11 @@ func TestCreateHooksCreate(t *testing.T) {
 }
 
 func TestUpdateHooksUpdate(t *testing.T) {
-	db, err := driver.Open(DbURL, dbDriver)
+	db, err := driver.Open(
+		DbURL, driver.Config{
+			Driver: dbDriver,
+		},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,7 +177,11 @@ func TestUpdateHooksUpdate(t *testing.T) {
 }
 
 func TestAfterFindHooks(t *testing.T) {
-	db, err := driver.Open(DbURL, dbDriver)
+	db, err := driver.Open(
+		DbURL, driver.Config{
+			Driver: dbDriver,
+		},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -223,7 +235,11 @@ func TestAfterFindHooks(t *testing.T) {
 }
 
 func TestAfterFindHookError(t *testing.T) {
-	db, err := driver.Open(DbURL, dbDriver)
+	db, err := driver.Open(
+		DbURL, driver.Config{
+			Driver: dbDriver,
+		},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
