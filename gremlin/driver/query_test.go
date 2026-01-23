@@ -362,15 +362,22 @@ func TestQuery(t *testing.T) {
 			if err != nil {
 				t.Error(err)
 			}
+
+			customDbIDGenerator, _ := driver.Open(DbURL, driver.Config{
+				Driver: dbDriver,
+				IDGenerator: func() any {
+					return testID.String()
+				},
+			})
+
 			data := testVertexForUtils{
-				Vertex: gsmtypes.Vertex{ID: testID.String()},
-				Name:   "test",
+				Name: "test",
 			}
-			err = driver.Create(db, &data)
+			err = driver.Create(customDbIDGenerator, &data)
 			if err != nil {
 				t.Error(err)
 			}
-			model, err := driver.Model[testVertexForUtils](db).ID(testID.String())
+			model, err := driver.Model[testVertexForUtils](customDbIDGenerator).ID(testID.String())
 			if err != nil {
 				t.Error(err)
 			}
