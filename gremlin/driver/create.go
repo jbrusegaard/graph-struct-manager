@@ -9,15 +9,15 @@ import (
 	"github.com/jbrusegaard/graph-struct-manager/gsmtypes"
 )
 
-func Create[T gsmtypes.VertexType](db *GremlinDriver, value *T) error {
+func Create[T any](db *GremlinDriver, value *T) error {
 	return createVertex(db, value)
 }
 
-func Update[T gsmtypes.VertexType](db *GremlinDriver, value *T) error {
+func Update[T any](db *GremlinDriver, value *T) error {
 	return updateVertex(db, value)
 }
 
-func updateVertex[T gsmtypes.VertexType](db *GremlinDriver, value *T) error {
+func updateVertex[T any](db *GremlinDriver, value *T) error {
 	err := validateStructPointerWithAnonymousVertex(value)
 	if err != nil {
 		db.logger.Errorf("Validation failed: %v", err)
@@ -51,7 +51,7 @@ func updateVertex[T gsmtypes.VertexType](db *GremlinDriver, value *T) error {
 	return runAfterUpdateHook(db, value)
 }
 
-func createVertex[T gsmtypes.VertexType](db *GremlinDriver, value *T) error {
+func createVertex[T any](db *GremlinDriver, value *T) error {
 	err := validateStructPointerWithAnonymousVertex(value)
 	if err != nil {
 		db.logger.Errorf("Validation failed: %v", err)

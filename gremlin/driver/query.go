@@ -1,6 +1,7 @@
 package driver
 
 import (
+	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -22,7 +23,7 @@ type RangeCondition struct {
 var cardinality = gremlingo.Cardinality
 
 // Query represents a chainable query builder
-type Query[T gsmtypes.VertexType] struct {
+type Query[T any] struct {
 	db             *GremlinDriver
 	conditions     []*QueryCondition
 	ids            []any
@@ -88,16 +89,23 @@ type OrderCondition struct {
 	desc  bool
 }
 
-func getLabel[T gsmtypes.VertexType]() (string, error) {
+func getLabel[T any]() (string, error) {
 	var v T
+	vertex, ok := any(v).(gsmtypes.VertexType)
+	if !ok {
+		return "", errors.New("VertexType is not a vertex")
+	}
 	// Use getLabelFromValue to support both pointer and value receivers
-	label := getLabelFromVertex(v)
+	label := getLabelFromVertex(vertex)
 	return label, nil
 }
 
 // NewQuery creates a new query builder for type T
-func NewQuery[T gsmtypes.VertexType](db *GremlinDriver) *Query[T] {
-	label, _ := getLabel[T]()
+func NewQuery[T any](db *GremlinDriver) *Query[T] {
+	label, err := getLabel[T]()
+	if err != nil {
+		panic(err)
+	}
 	queryAsString := strings.Builder{}
 	queryAsString.WriteString("V()")
 	if label != "" {
