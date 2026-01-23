@@ -7,6 +7,9 @@ type VertexType interface {
 	GetVertexLastModified() time.Time
 	GetVertexCreatedAt() time.Time
 	Label() string
+	SetVertexID(id any)
+	SetVertexLastModified(t time.Time)
+	SetVertexCreatedAt(t time.Time)
 }
 
 type EdgeType interface {

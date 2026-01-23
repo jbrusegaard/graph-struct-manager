@@ -10,6 +10,41 @@ import (
 	"github.com/jbrusegaard/graph-struct-manager/gsmtypes"
 )
 
+type testVertexWithoutAnonymousVertex struct {
+	ID           string    `json:"id" gremlin:"id"`
+	LastModified time.Time `json:"last_modified" gremlin:"last_modified"`
+	CreatedAt    time.Time `json:"created_at"    gremlin:"created_at"`
+	Name         string    `json:"name" gremlin:"name"`
+}
+
+func (t *testVertexWithoutAnonymousVertex) GetVertexID() any {
+	return t.ID
+}
+
+func (t *testVertexWithoutAnonymousVertex) GetVertexLastModified() time.Time {
+	return t.LastModified
+}
+
+func (t *testVertexWithoutAnonymousVertex) GetVertexCreatedAt() time.Time {
+	return t.CreatedAt
+}
+
+func (t *testVertexWithoutAnonymousVertex) Label() string {
+	return ""
+}
+
+func (t *testVertexWithoutAnonymousVertex) SetVertexID(id any) {
+	t.ID = id.(string)
+}
+
+func (t *testVertexWithoutAnonymousVertex) SetVertexLastModified(lastModified time.Time) {
+	t.LastModified = lastModified
+}
+
+func (t *testVertexWithoutAnonymousVertex) SetVertexCreatedAt(createdAt time.Time) {
+	t.CreatedAt = createdAt
+}
+
 type testVertexForUtils struct {
 	gsmtypes.Vertex
 	Name              string            `json:"name"          gremlin:"name"`
@@ -303,12 +338,9 @@ func TestUtils(t *testing.T) {
 			v := testVertexForUtils{
 				Name: "test",
 			}
-			name, mapValue, err := driver.StructToMapForTest(v)
+			mapValue, err := driver.StructToMapForTest(v)
 			if err != nil {
 				t.Errorf("Error getting struct name: %v", err)
-			}
-			if name != "test_vertex_for_utils" {
-				t.Errorf("Struct name should be test_vertex_for_utils, got %s", name)
 			}
 			if mapValue["name"] != "test" {
 				t.Errorf("Struct name should be test, got %s", mapValue["name"])
@@ -321,12 +353,9 @@ func TestUtils(t *testing.T) {
 			v := testVertexForUtils{
 				Name: "test",
 			}
-			name, mapValue, err := driver.StructToMapForTest(&v)
+			mapValue, err := driver.StructToMapForTest(&v)
 			if err != nil {
 				t.Errorf("Error getting struct name: %v", err)
-			}
-			if name != "test_vertex_for_utils" {
-				t.Errorf("Struct name should be test_vertex_for_utils, got %s", name)
 			}
 			if mapValue["name"] != "test" {
 				t.Errorf("Struct name should be test, got %s", mapValue["name"])
@@ -336,7 +365,7 @@ func TestUtils(t *testing.T) {
 	t.Run(
 		"TestStructToMapPointerError", func(t *testing.T) {
 			t.Parallel()
-			_, _, err := driver.StructToMapForTest(1)
+			_, err := driver.StructToMapForTest(1)
 			if err == nil {
 				t.Errorf("No error struct to map: %v", err)
 			}
@@ -348,13 +377,9 @@ func TestUtils(t *testing.T) {
 			v := &testVertexWithCustomLabel{
 				Name: "test",
 			}
-			label, mapValue, err := driver.StructToMapForTest(v)
+			mapValue, err := driver.StructToMapForTest(v)
 			if err != nil {
 				t.Errorf("Error getting struct to map: %v", err)
-			}
-			// Verify custom label is used instead of normalized struct name
-			if label != "customVertexLabel" {
-				t.Errorf("Label should be customVertexLabel, got %s", label)
 			}
 			if mapValue["name"] != "test" {
 				t.Errorf("Map value name should be test, got %s", mapValue["name"])
@@ -406,14 +431,11 @@ func TestUtils(t *testing.T) {
 			v := &testVertexWithCustomLabel{
 				Name: "test",
 			}
-			label, mapValue, err := driver.StructToMapForTest(v)
+			mapValue, err := driver.StructToMapForTest(v)
 			if err != nil {
 				t.Errorf("Error getting struct to map: %v", err)
 			}
-			// Verify custom label is used when passing a pointer
-			if label != "customVertexLabel" {
-				t.Errorf("Label should be customVertexLabel, got %s", label)
-			}
+
 			if mapValue["name"] != "test" {
 				t.Errorf("Map value name should be test, got %s", mapValue["name"])
 			}
@@ -472,7 +494,7 @@ func TestUtils(t *testing.T) {
 			v := testVertexForUtils{
 				Name: "test",
 			}
-			_, mapValue, err := driver.StructToMapForTest(v)
+			mapValue, err := driver.StructToMapForTest(v)
 			if err != nil {
 				t.Errorf("Error getting struct to map: %v", err)
 			}
@@ -488,9 +510,13 @@ func TestUtils(t *testing.T) {
 		"TestNilPointerOnUnloadGremlinResultIntoStruct", func(t *testing.T) {
 			t.Parallel()
 			var v *testVertexForUtils
-			err := driver.UnloadGremlinResultIntoStruct(v, &gremlingo.Result{Data: map[any]any{
-				"something": "test",
-			}})
+			err := driver.UnloadGremlinResultIntoStruct(
+				v, &gremlingo.Result{
+					Data: map[any]any{
+						"something": "test",
+					},
+				},
+			)
 			if err == nil {
 				t.Errorf("Error should not be nil")
 			}

@@ -22,7 +22,7 @@ type RangeCondition struct {
 var cardinality = gremlingo.Cardinality
 
 // Query represents a chainable query builder
-type Query[T gsmtypes.VertexType] struct {
+type Query[T any] struct {
 	db             *GremlinDriver
 	conditions     []*QueryCondition
 	ids            []any
@@ -88,16 +88,16 @@ type OrderCondition struct {
 	desc  bool
 }
 
-func getLabel[T gsmtypes.VertexType]() (string, error) {
+func getLabel[T any]() string {
 	var v T
 	// Use getLabelFromValue to support both pointer and value receivers
 	label := getLabelFromVertex(v)
-	return label, nil
+	return label
 }
 
 // NewQuery creates a new query builder for type T
-func NewQuery[T gsmtypes.VertexType](db *GremlinDriver) *Query[T] {
-	label, _ := getLabel[T]()
+func NewQuery[T any](db *GremlinDriver) *Query[T] {
+	label := getLabel[T]()
 	queryAsString := strings.Builder{}
 	queryAsString.WriteString("V()")
 	if label != "" {
@@ -339,10 +339,7 @@ func (q *Query[T]) Delete() error {
 func (q *Query[T]) ID(id any) (T, error) {
 	var v T
 	query := q.db.g.V(id)
-	label, err := getLabel[T]()
-	if err != nil {
-		return v, err
-	}
+	label := getLabel[T]()
 	query = query.HasLabel(label)
 	result, err := ToMapTraversal(query, q.subTraversals, true).Next()
 	if err != nil {

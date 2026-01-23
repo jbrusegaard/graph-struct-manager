@@ -13,14 +13,17 @@ type Vertex struct {
 	CreatedAt    time.Time `json:"created_at"    gremlin:"created_at"`
 }
 
-func (v Vertex) GetVertexID() any                 { return v.ID }
-func (v Vertex) GetVertexLastModified() time.Time { return v.LastModified }
-func (v Vertex) GetVertexCreatedAt() time.Time    { return v.CreatedAt }
-func (v Vertex) Label() string {
+func (v *Vertex) GetVertexID() any                 { return v.ID }
+func (v *Vertex) GetVertexLastModified() time.Time { return v.LastModified }
+func (v *Vertex) GetVertexCreatedAt() time.Time    { return v.CreatedAt }
+func (v *Vertex) Label() string {
 	// Default implementation returns empty string
 	// The driver will use struct name normalization when Label() returns empty
 	return ""
 }
+func (v *Vertex) SetVertexID(id any)                { v.ID = id }
+func (v *Vertex) SetVertexLastModified(t time.Time) { v.LastModified = t }
+func (v *Vertex) SetVertexCreatedAt(t time.Time)    { v.CreatedAt = t }
 
 type Edge struct {
 	ID           any    `json:"id"            gremlin:"id"`

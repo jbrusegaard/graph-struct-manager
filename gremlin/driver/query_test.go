@@ -2,6 +2,7 @@ package driver_test
 
 import (
 	"testing"
+	"time"
 
 	gremlingo "github.com/apache/tinkerpop/gremlin-go/v3/driver"
 	"github.com/google/uuid"
@@ -559,6 +560,19 @@ func TestQuery(t *testing.T) {
 		if results[0].Name != models[0].Name || results[1].Name != models[2].Name {
 			t.Errorf("Expected %s and %s, got %s and %s",
 				models[0].Name, models[2].Name, results[0].Name, results[1].Name)
+		}
+	})
+	t.Run("TestQueryWithVertexType", func(t *testing.T) {
+		t.Cleanup(cleanDB)
+		testVertexWithoutAnonymousVertex := testVertexWithoutAnonymousVertex{
+			ID:           uuid.New().String(),
+			LastModified: time.Now(),
+			CreatedAt:    time.Now(),
+			Name:         "test",
+		}
+		err = driver.Create(db, &testVertexWithoutAnonymousVertex)
+		if err != nil {
+			t.Error(err)
 		}
 	})
 }

@@ -1,6 +1,7 @@
 package driver
 
 import (
+	"errors"
 	"fmt"
 
 	gremlingo "github.com/apache/tinkerpop/gremlin-go/v3/driver"
@@ -70,8 +71,12 @@ func (driver *GremlinDriver) Label(label string) *RawQuery {
 	}
 }
 
-func Save[T gsmtypes.VertexType](driver *GremlinDriver, v *T) error {
-	if (*v).GetVertexID() == nil {
+func Save[T any](driver *GremlinDriver, v *T) error {
+	vertexValue, ok := any(v).(gsmtypes.VertexType)
+	if !ok {
+		return errors.New("v does not implement VertexType")
+	}
+	if vertexValue.GetVertexID() == nil {
 		return Create(driver, v)
 	}
 	return Update(driver, v)
@@ -80,12 +85,12 @@ func Save[T gsmtypes.VertexType](driver *GremlinDriver, v *T) error {
 // Package-level generic functions
 
 // Model returns a new query builder for the specified type
-func Model[T gsmtypes.VertexType](driver *GremlinDriver) *Query[T] {
+func Model[T any](driver *GremlinDriver) *Query[T] {
 	return NewQuery[T](driver)
 }
 
 // Where is a convenience method that creates a new query with a condition
-func Where[T gsmtypes.VertexType](
+func Where[T any](
 	driver *GremlinDriver,
 	field string,
 	operator comparator.Comparator,
