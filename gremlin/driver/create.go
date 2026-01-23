@@ -18,17 +18,12 @@ func Update[T any](db *GremlinDriver, value *T) error {
 }
 
 func updateVertex[T any](db *GremlinDriver, value *T) error {
-	err := validateStructPointerWithAnonymousVertex(value)
-	if err != nil {
-		db.logger.Errorf("Validation failed: %v", err)
-		return err
-	}
-	err = runBeforeUpdateHook(db, value)
+	err := runBeforeUpdateHook(db, value)
 	if err != nil {
 		return err
 	}
 	now := time.Now().UTC()
-	_, mapValue, err := structToMap(value)
+	mapValue, err := structToMap(value)
 	if err != nil {
 		return err
 	}
@@ -40,29 +35,28 @@ func updateVertex[T any](db *GremlinDriver, value *T) error {
 	id := mapValue["id"]
 	delete(mapValue, "id")
 	mapValue[gsmtypes.LastModified] = now
-	query := db.g.V(id)
+	label := getLabel[T]()
+	query := db.g.V(id).HasLabel(label)
 	query = handlePropertyUpdate(db, mapValue, query)
 	_, err = query.Next()
 	if err != nil {
 		return err
 	}
-	reflectNow := reflect.ValueOf(now)
-	reflect.ValueOf(value).Elem().FieldByName("LastModified").Set(reflectNow)
+	vertex, ok := any(value).(gsmtypes.VertexType)
+	if !ok {
+		return errors.New("value does not implement VertexType")
+	}
+	vertex.SetVertexLastModified(now)
 	return runAfterUpdateHook(db, value)
 }
 
 func createVertex[T any](db *GremlinDriver, value *T) error {
-	err := validateStructPointerWithAnonymousVertex(value)
-	if err != nil {
-		db.logger.Errorf("Validation failed: %v", err)
-		return err
-	}
-	err = runBeforeCreateHook(db, value)
+	err := runBeforeCreateHook(db, value)
 	if err != nil {
 		return err
 	}
 	now := time.Now().UTC()
-	label, mapValue, err := structToMap(value)
+	mapValue, err := structToMap(value)
 	if err != nil {
 		return err
 	}
@@ -71,6 +65,7 @@ func createVertex[T any](db *GremlinDriver, value *T) error {
 	if !hasID || id == nil {
 		hasID = false
 	}
+	label := getLabel[T]()
 	mapValue[gsmtypes.LastModified] = now
 	mapValue[gsmtypes.CreatedAt] = now
 	query := db.g.AddV(label)
@@ -82,16 +77,17 @@ func createVertex[T any](db *GremlinDriver, value *T) error {
 	if err != nil {
 		return err
 	}
+
+	vertex, ok := any(value).(gsmtypes.VertexType)
+	if !ok {
+		return errors.New("value does not implement VertexType")
+	}
 	// Check if ID was pre-set or if generated add it to struct
 	if !hasID {
-		reflect.ValueOf(value).
-			Elem().
-			FieldByName("ID").
-			Set(reflect.ValueOf(vertexID.GetInterface()))
+		vertex.SetVertexID(vertexID.GetInterface())
 	}
-	reflectNow := reflect.ValueOf(now)
-	reflect.ValueOf(value).Elem().FieldByName("LastModified").Set(reflectNow)
-	reflect.ValueOf(value).Elem().FieldByName("CreatedAt").Set(reflectNow)
+	vertex.SetVertexCreatedAt(now)
+	vertex.SetVertexLastModified(now)
 	return runAfterCreateHook(db, value)
 }
 

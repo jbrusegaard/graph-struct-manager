@@ -1,7 +1,6 @@
 package driver
 
 import (
-	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -89,23 +88,16 @@ type OrderCondition struct {
 	desc  bool
 }
 
-func getLabel[T any]() (string, error) {
+func getLabel[T any]() string {
 	var v T
-	vertex, ok := any(v).(gsmtypes.VertexType)
-	if !ok {
-		return "", errors.New("VertexType is not a vertex")
-	}
 	// Use getLabelFromValue to support both pointer and value receivers
-	label := getLabelFromVertex(vertex)
-	return label, nil
+	label := getLabelFromVertex(v)
+	return label
 }
 
 // NewQuery creates a new query builder for type T
 func NewQuery[T any](db *GremlinDriver) *Query[T] {
-	label, err := getLabel[T]()
-	if err != nil {
-		panic(err)
-	}
+	label := getLabel[T]()
 	queryAsString := strings.Builder{}
 	queryAsString.WriteString("V()")
 	if label != "" {
@@ -347,10 +339,7 @@ func (q *Query[T]) Delete() error {
 func (q *Query[T]) ID(id any) (T, error) {
 	var v T
 	query := q.db.g.V(id)
-	label, err := getLabel[T]()
-	if err != nil {
-		return v, err
-	}
+	label := getLabel[T]()
 	query = query.HasLabel(label)
 	result, err := ToMapTraversal(query, q.subTraversals, true).Next()
 	if err != nil {

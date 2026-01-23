@@ -230,8 +230,12 @@ func setGremlinExtras(extrasFields []reflect.Value, extras map[string]any) {
 	}
 }
 
-func getLabelFromVertex(value gsmtypes.VertexType) string {
-	label := value.Label()
+func getLabelFromVertex(value any) string {
+	var label string
+	vertexValue, ok := value.(gsmtypes.VertexType)
+	if ok {
+		label = vertexValue.Label()
+	}
 	if label == "" {
 		// Get the concrete type from the interface
 		concreteType := reflect.ValueOf(value).Type()
@@ -244,19 +248,19 @@ func getLabelFromVertex(value gsmtypes.VertexType) string {
 	return label
 }
 
-func getLabelFromEdge(value gsmtypes.EdgeType) string {
-	label := value.Label()
-	if label == "" {
-		// Get the concrete type from the interface
-		concreteType := reflect.ValueOf(value).Type()
-		// Handle pointer types
-		if concreteType.Kind() == reflect.Ptr {
-			concreteType = concreteType.Elem()
-		}
-		return stringy.New(concreteType.Name()).SnakeCase().ToLower()
-	}
-	return label
-}
+// func getLabelFromEdge(value gsmtypes.EdgeType) string {
+// 	label := value.Label()
+// 	if label == "" {
+// 		// Get the concrete type from the interface
+// 		concreteType := reflect.ValueOf(value).Type()
+// 		// Handle pointer types
+// 		if concreteType.Kind() == reflect.Ptr {
+// 			concreteType = concreteType.Elem()
+// 		}
+// 		return stringy.New(concreteType.Name()).SnakeCase().ToLower()
+// 	}
+// 	return label
+// }
 
 // structToMap converts a struct to a map[string]any and returns the label and the map
 // the label is determined by calling Label() method if available, otherwise the name of the struct converted to snake case
@@ -264,9 +268,8 @@ func getLabelFromEdge(value gsmtypes.EdgeType) string {
 // the error is the error if any
 func structToMap( //nolint:gocognit
 	value any,
-) (string, map[string]any, error) {
+) (map[string]any, error) {
 	mapValue := make(map[string]any)
-	var err error
 
 	// Get the reflection value
 	rv := reflect.ValueOf(value)
@@ -277,20 +280,10 @@ func structToMap( //nolint:gocognit
 	}
 
 	if rv.Kind() != reflect.Struct {
-		return "", nil, errors.New("value is not a struct")
+		return nil, errors.New("value is not a struct")
 	}
 	// Get the type information
 	rt := rv.Type()
-
-	// Get the label using the helper function
-	var label string
-	if vertexType, vertexOk := value.(gsmtypes.VertexType); vertexOk {
-		label = getLabelFromVertex(vertexType)
-	} else if edgeType, edgeOk := value.(gsmtypes.EdgeType); edgeOk {
-		label = getLabelFromEdge(edgeType)
-	} else {
-		return "", nil, errors.New("value must implement either VertexType or EdgeType")
-	}
 
 	// Loop through all fields
 	for i := range rv.NumField() {
@@ -299,12 +292,12 @@ func structToMap( //nolint:gocognit
 
 		if field.Anonymous && fieldValue.Kind() == reflect.Struct {
 			// Recursively process the anonymous struct
-			_, anonymousMap, structMapErr := structToMap(fieldValue.Interface())
+			anonymousMap, structMapErr := structToMap(fieldValue.Interface())
 			if structMapErr != nil {
-				return "", nil, fmt.Errorf(
+				return nil, fmt.Errorf(
 					"error processing anonymous field %s: %w",
 					field.Name,
-					err,
+					structMapErr,
 				)
 			}
 			maps.Copy(mapValue, anonymousMap)
@@ -352,7 +345,7 @@ func structToMap( //nolint:gocognit
 		mapValue[tagParts.name] = fieldInterface
 	}
 
-	return label, mapValue, nil
+	return mapValue, nil
 }
 
 func validateStructPointerWithAnonymousVertex(value any) error {

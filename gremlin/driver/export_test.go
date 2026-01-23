@@ -22,7 +22,7 @@ func GetStructNameForTest[T any]() (string, error) {
 	return getStructName[T]()
 }
 
-func StructToMapForTest(value any) (string, map[string]any, error) {
+func StructToMapForTest(value any) (map[string]any, error) {
 	return structToMap(value)
 }
 
