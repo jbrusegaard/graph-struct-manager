@@ -87,10 +87,7 @@ func createVertex[T any](db *GremlinDriver, value *T) error {
 	if !ok {
 		return errors.New("value does not implement VertexType")
 	}
-	// Check if ID was pre-set or if generated add it to struct
-	if !hasID {
-		vertex.SetVertexID(vertexID.GetInterface())
-	}
+	vertex.SetVertexID(vertexID.GetInterface())
 	vertex.SetVertexCreatedAt(now)
 	vertex.SetVertexLastModified(now)
 	return runAfterCreateHook(db, value)
