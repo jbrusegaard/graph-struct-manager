@@ -35,7 +35,7 @@ func updateVertex[T any](db *GremlinDriver, value *T) error {
 	id := mapValue["id"]
 	delete(mapValue, "id")
 	mapValue[gsmtypes.LastModified] = now
-	label := getLabel[T]()
+	label := GetLabel[T]()
 	query := db.g.V(id).HasLabel(label)
 	query = handlePropertyUpdate(db, mapValue, query)
 	_, err = query.Next()
@@ -70,7 +70,7 @@ func createVertex[T any](db *GremlinDriver, value *T) error {
 		}
 	}
 
-	label := getLabel[T]()
+	label := GetLabel[T]()
 	mapValue[gsmtypes.LastModified] = now
 	mapValue[gsmtypes.CreatedAt] = now
 	query := db.g.AddV(label)

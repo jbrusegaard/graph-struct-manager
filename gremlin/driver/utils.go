@@ -232,13 +232,29 @@ func setGremlinExtras(extrasFields []reflect.Value, extras map[string]any) {
 
 func getLabelFromVertex(value any) string {
 	var label string
-	vertexValue, ok := value.(gsmtypes.VertexType)
-	if ok {
-		label = vertexValue.Label()
+	if value != nil { //nolint:nestif
+		vertexValue, ok := value.(gsmtypes.CustomLabelType)
+		if ok {
+			label = vertexValue.Label()
+		} else {
+			customLabelType := reflect.TypeFor[gsmtypes.CustomLabelType]()
+			valueType := reflect.TypeOf(value)
+			if valueType != nil && valueType.Kind() != reflect.Ptr &&
+				reflect.PointerTo(valueType).Implements(customLabelType) {
+				pointerValue := reflect.New(valueType)
+				if pointerLabel, ptrOk := pointerValue.Interface().(gsmtypes.CustomLabelType); ptrOk {
+					label = pointerLabel.Label()
+				}
+			}
+		}
 	}
 	if label == "" {
 		// Get the concrete type from the interface
-		concreteType := reflect.ValueOf(value).Type()
+		concreteValue := reflect.ValueOf(value)
+		if !concreteValue.IsValid() {
+			return ""
+		}
+		concreteType := concreteValue.Type()
 		// Handle pointer types
 		if concreteType.Kind() == reflect.Ptr {
 			concreteType = concreteType.Elem()
