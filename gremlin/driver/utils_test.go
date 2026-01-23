@@ -439,6 +439,10 @@ func TestUtils(t *testing.T) {
 			if mapValue["name"] != "test" {
 				t.Errorf("Map value name should be test, got %s", mapValue["name"])
 			}
+			label := driver.GetLabel[testVertexWithCustomLabel]()
+			if label != v.Label() {
+				t.Errorf("Label should be customVertexLabel, got %s", label)
+			}
 		},
 	)
 	var i *int

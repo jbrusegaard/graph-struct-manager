@@ -88,7 +88,7 @@ type OrderCondition struct {
 	desc  bool
 }
 
-func getLabel[T any]() string {
+func GetLabel[T any]() string {
 	var v T
 	// Use getLabelFromValue to support both pointer and value receivers
 	label := getLabelFromVertex(v)
@@ -97,7 +97,7 @@ func getLabel[T any]() string {
 
 // NewQuery creates a new query builder for type T
 func NewQuery[T any](db *GremlinDriver) *Query[T] {
-	label := getLabel[T]()
+	label := GetLabel[T]()
 	queryAsString := strings.Builder{}
 	queryAsString.WriteString("V()")
 	if label != "" {
@@ -339,7 +339,7 @@ func (q *Query[T]) Delete() error {
 func (q *Query[T]) ID(id any) (T, error) {
 	var v T
 	query := q.db.g.V(id)
-	label := getLabel[T]()
+	label := GetLabel[T]()
 	query = query.HasLabel(label)
 	result, err := ToMapTraversal(query, q.subTraversals, true).Next()
 	if err != nil {
