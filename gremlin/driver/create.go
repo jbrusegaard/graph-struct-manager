@@ -13,10 +13,6 @@ func Create[T any](db *GremlinDriver, value *T) error {
 	return createVertex(db, value)
 }
 
-func Update[T any](db *GremlinDriver, value *T) error {
-	return updateVertex(db, value)
-}
-
 func getSlicePropertyNames(propertyMap map[string]any) []any {
 	var slicePropertyNames []any
 	for k, v := range propertyMap {

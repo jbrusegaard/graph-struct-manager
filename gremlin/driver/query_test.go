@@ -647,33 +647,4 @@ func TestQuery(t *testing.T) {
 			}
 		},
 	)
-	t.Run(
-		"Test update with existing slice property", func(t *testing.T) {
-			t.Cleanup(cleanDB)
-			err = seedData(db, seededData)
-			if err != nil {
-				t.Error(err)
-			}
-			model, err := driver.Model[testVertexForUtils](db).Where("name", comparator.EQ, "second").Take()
-			if err != nil {
-				t.Error(err)
-			}
-			model.ListTest = []string{"Going to test the update with existing slice property", "another test"}
-			err = driver.Update(db, &model)
-			if err != nil {
-				t.Error("error updating property", err)
-			}
-			updatedModel, err := driver.Model[testVertexForUtils](db).Where("name", comparator.EQ, "second").Take()
-			if err != nil {
-				t.Error(err)
-			}
-			if !slices.Contains(updatedModel.ListTest, "Going to test the update with existing slice property") || !slices.Contains(
-				updatedModel.ListTest, "another test",
-			) {
-				t.Errorf(
-					"Expected %s and %s, got %s and %s", "Going to test the update with existing slice property", "another test", updatedModel.ListTest[0], updatedModel.ListTest[1],
-				)
-			}
-		},
-	)
 }
