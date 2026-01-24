@@ -17,6 +17,16 @@ func Update[T any](db *GremlinDriver, value *T) error {
 	return updateVertex(db, value)
 }
 
+func getSlicePropertyNames(propertyMap map[string]any) []any {
+	var slicePropertyNames []any
+	for k, v := range propertyMap {
+		if reflect.ValueOf(v).Kind() == reflect.Slice {
+			slicePropertyNames = append(slicePropertyNames, k)
+		}
+	}
+	return slicePropertyNames
+}
+
 func updateVertex[T any](db *GremlinDriver, value *T) error {
 	err := runBeforeUpdateHook(db, value)
 	if err != nil {
@@ -36,6 +46,11 @@ func updateVertex[T any](db *GremlinDriver, value *T) error {
 	delete(mapValue, "id")
 	mapValue[gsmtypes.LastModified] = now
 	label := GetLabel[T]()
+	slicePropertyNames := getSlicePropertyNames(mapValue)
+	errChan := db.g.V(id).HasLabel(label).Properties(slicePropertyNames...).Drop().Iterate()
+	if propResetErr := <-errChan; propResetErr != nil {
+		return propResetErr
+	}
 	query := db.g.V(id).HasLabel(label)
 	query = handlePropertyUpdate(db, mapValue, query)
 	_, err = query.Next()
