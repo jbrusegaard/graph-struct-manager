@@ -99,23 +99,13 @@ func handlePropertyUpdate(
 	for k, v := range properties {
 		// check if v is a slice and Neptune is being used
 		if db.dbDriver == Neptune &&
-			(reflect.ValueOf(v).Kind() == reflect.Slice || reflect.ValueOf(v).Kind() == reflect.Map) {
-			if reflect.ValueOf(v).Kind() == reflect.Slice {
-				for i := range reflect.ValueOf(v).Len() {
-					query = query.Property(
-						gremlingo.Cardinality.Set,
-						k,
-						reflect.ValueOf(v).Index(i).Interface(),
-					)
-				}
-			} else {
-				for _, key := range reflect.ValueOf(v).MapKeys() {
-					query = query.Property(
-						gremlingo.Cardinality.Set,
-						k,
-						reflect.ValueOf(v).MapIndex(key).Interface(),
-					)
-				}
+			reflect.ValueOf(v).Kind() == reflect.Slice {
+			for i := range reflect.ValueOf(v).Len() {
+				query = query.Property(
+					gremlingo.Cardinality.Set,
+					k,
+					reflect.ValueOf(v).Index(i).Interface(),
+				)
 			}
 		} else {
 			query = query.Property(gremlingo.Cardinality.Single, k, v)
