@@ -47,15 +47,14 @@ func (t *testVertexWithoutAnonymousVertex) SetVertexCreatedAt(createdAt time.Tim
 
 type testVertexForUtils struct {
 	gsmtypes.Vertex
-	Name              string            `json:"name"          gremlin:"name"`
-	Ignore            string            `json:"-"             gremlin:"-"`
-	ListTest          []string          `json:"listTest"      gremlin:"listTest"`
-	MapTest           map[string]string `json:"mapTest"       gremlin:"mapTest"`
-	Unmapped          int               `json:"unmapped"      gremlin:"unmapped"`
-	Sort              int               `json:"sort"          gremlin:"sort"`
-	SubTraversalTest  string            `json:"testConstant"                                    gremlinSubTraversal:"subTraversalTest"`
-	SubTraversalTest2 int               `json:"testConstant2"                                   gremlinSubTraversal:"subTraversalTest2"`
-	OmitEmptyTest     string            `json:"omitEmptyTest" gremlin:"omitEmptyTest,omitempty"`
+	Name              string   `json:"name"          gremlin:"name"`
+	Ignore            string   `json:"-"             gremlin:"-"`
+	ListTest          []string `json:"listTest"      gremlin:"listTest"`
+	Unmapped          int      `json:"unmapped"      gremlin:"unmapped"`
+	Sort              int      `json:"sort"          gremlin:"sort"`
+	SubTraversalTest  string   `json:"testConstant"                                    gremlinSubTraversal:"subTraversalTest"`
+	SubTraversalTest2 int      `json:"testConstant2"                                   gremlinSubTraversal:"subTraversalTest2"`
+	OmitEmptyTest     string   `json:"omitEmptyTest" gremlin:"omitEmptyTest,omitempty"`
 }
 
 type testVertexWithNumSlice struct {

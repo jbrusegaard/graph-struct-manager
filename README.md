@@ -200,8 +200,7 @@ Hooks receive the `*GremlinDriver` used for the operation and can abort by retur
 
 **Order of execution:**
 - `Create` calls `BeforeCreate`, writes the vertex, sets `ID/CreatedAt/LastModified`, then `AfterCreate`.
-- `Update` calls `BeforeUpdate`, writes the changes, updates `LastModified`, then `AfterUpdate`.
-- `Save` dispatches to `Create` or `Update` based on whether `ID` is set.
+- `Save` uses `BeforeCreate`/`AfterCreate` when `ID` is empty, otherwise uses `BeforeUpdate`/`AfterUpdate`, writes the changes, and updates `LastModified`.
 - `Find`/`Take`/`ID` call `AfterFind` on each loaded vertex before returning.
 
 **Example:**
@@ -945,7 +944,12 @@ func main() {
     }
     fmt.Printf("Found user by ID: %+v\n", userByID)
 
-    // Update would typically involve Create with existing ID
+    // Update - modify fields and Save
+    newUser.Age = 29
+    err = GSM.Save(db, &newUser)
+    if err != nil {
+        log.Fatal(err)
+    }
 
     // Delete - Remove user
     err = GSM.Model[TestVertex](db).

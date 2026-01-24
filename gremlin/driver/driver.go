@@ -97,7 +97,7 @@ func Save[T any](driver *GremlinDriver, v *T) error {
 	if vertexValue.GetVertexID() == nil {
 		return Create(driver, v)
 	}
-	return Update(driver, v)
+	return updateVertex(driver, v)
 }
 
 // Package-level generic functions
