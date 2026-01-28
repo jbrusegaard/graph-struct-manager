@@ -1,6 +1,7 @@
 package driver_test
 
 import (
+	"errors"
 	"testing"
 
 	gremlingo "github.com/apache/tinkerpop/gremlin-go/v3/driver"
@@ -570,6 +571,13 @@ func TestQuery(t *testing.T) {
 		if results[0].Name != models[0].Name || results[1].Name != models[2].Name {
 			t.Errorf("Expected %s and %s, got %s and %s",
 				models[0].Name, models[2].Name, results[0].Name, results[1].Name)
+		}
+	})
+	t.Run("Test Custom Error", func(t *testing.T) {
+		t.Cleanup(cleanDB)
+		_, err := driver.Model[testVertexForUtils](db).Take()
+		if !errors.Is(err, gsmtypes.ErrNotFound) {
+			t.Errorf("Expected ErrNotFound, got %v", err)
 		}
 	})
 }
