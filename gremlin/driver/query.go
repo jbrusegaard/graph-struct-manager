@@ -1,6 +1,7 @@
 package driver
 
 import (
+	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -13,6 +14,12 @@ import (
 	"github.com/jbrusegaard/graph-struct-manager/comparator"
 	"github.com/jbrusegaard/graph-struct-manager/gsmtypes"
 )
+
+var errGremlinNotFound = errors.New("E0903: there are no results left")
+
+func isGremlinNotFoundErr(err error) bool {
+	return err.Error() == errGremlinNotFound.Error()
+}
 
 type RangeCondition struct {
 	lower int
@@ -298,6 +305,9 @@ func (q *Query[T]) Take() (T, error) {
 	query = q.doOrderSkipRange(query)
 	result, err := query.Next()
 	if err != nil {
+		if isGremlinNotFoundErr(err) {
+			return v, gsmtypes.ErrNotFound
+		}
 		return v, err
 	}
 
@@ -315,10 +325,13 @@ func (q *Query[T]) Take() (T, error) {
 // Count returns the number of matching results
 func (q *Query[T]) Count() (int, error) {
 	q.writeDebugString(".Count()")
-	query := q.BuildQuery()
-	result, err := query.Count().Next()
+	query := q.BuildQuery().Count()
+	result, defaultVal, err := nextWithDefaultValue(query, 0)
 	if err != nil {
 		return 0, err
+	}
+	if result == nil {
+		return defaultVal, nil
 	}
 	num, err := result.GetInt()
 	if err != nil {
@@ -343,6 +356,9 @@ func (q *Query[T]) ID(id any) (T, error) {
 	query = query.HasLabel(label)
 	result, err := ToMapTraversal(query, q.subTraversals, true).Next()
 	if err != nil {
+		if isGremlinNotFoundErr(err) {
+			return v, gsmtypes.ErrNotFound
+		}
 		return v, err
 	}
 	err = UnloadGremlinResultIntoStruct(&v, result)

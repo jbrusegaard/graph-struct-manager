@@ -1,6 +1,7 @@
 package driver_test
 
 import (
+	"errors"
 	"slices"
 	"testing"
 
@@ -8,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jbrusegaard/graph-struct-manager/comparator"
 	"github.com/jbrusegaard/graph-struct-manager/gremlin/driver"
+	"github.com/jbrusegaard/graph-struct-manager/gsmtypes"
 )
 
 var dbDriver = driver.Neptune
@@ -647,4 +649,11 @@ func TestQuery(t *testing.T) {
 			}
 		},
 	)
+	t.Run("Test Custom Error", func(t *testing.T) {
+		t.Cleanup(cleanDB)
+		_, err := driver.Model[testVertexForUtils](db).Take()
+		if !errors.Is(err, gsmtypes.ErrNotFound) {
+			t.Errorf("Expected ErrNotFound, got %v", err)
+		}
+	})
 }

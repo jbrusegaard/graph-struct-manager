@@ -408,3 +408,21 @@ func getStructFieldNameAndType[T any](tag string) (string, reflect.Type, error) 
 	}
 	return "", nil, errors.New("field not found")
 }
+
+func nextWithDefaultValue[T any](
+	query *gremlingo.GraphTraversal,
+	defaultVal T,
+) (*gremlingo.Result, T, error) {
+	set, err := query.GetResultSet()
+	if err != nil {
+		return nil, defaultVal, err
+	}
+	if set.IsEmpty() {
+		return nil, defaultVal, nil
+	}
+	result, _, err := set.One()
+	if err != nil {
+		return nil, defaultVal, err
+	}
+	return result, defaultVal, nil
+}
