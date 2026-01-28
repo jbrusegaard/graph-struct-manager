@@ -13,8 +13,14 @@ func Create[T any](db *GremlinDriver, value *T) error {
 	return createVertex(db, value)
 }
 
-func Update[T any](db *GremlinDriver, value *T) error {
-	return updateVertex(db, value)
+func getSlicePropertyNames(propertyMap map[string]any) []any {
+	var slicePropertyNames []any
+	for k, v := range propertyMap {
+		if reflect.ValueOf(v).Kind() == reflect.Slice {
+			slicePropertyNames = append(slicePropertyNames, k)
+		}
+	}
+	return slicePropertyNames
 }
 
 func updateVertex[T any](db *GremlinDriver, value *T) error {
@@ -36,6 +42,11 @@ func updateVertex[T any](db *GremlinDriver, value *T) error {
 	delete(mapValue, "id")
 	mapValue[gsmtypes.LastModified] = now
 	label := GetLabel[T]()
+	slicePropertyNames := getSlicePropertyNames(mapValue)
+	errChan := db.g.V(id).HasLabel(label).Properties(slicePropertyNames...).Drop().Iterate()
+	if propResetErr := <-errChan; propResetErr != nil {
+		return propResetErr
+	}
 	query := db.g.V(id).HasLabel(label)
 	query = handlePropertyUpdate(db, mapValue, query)
 	_, err = query.Next()
@@ -99,23 +110,13 @@ func handlePropertyUpdate(
 	for k, v := range properties {
 		// check if v is a slice and Neptune is being used
 		if db.dbDriver == Neptune &&
-			(reflect.ValueOf(v).Kind() == reflect.Slice || reflect.ValueOf(v).Kind() == reflect.Map) {
-			if reflect.ValueOf(v).Kind() == reflect.Slice {
-				for i := range reflect.ValueOf(v).Len() {
-					query = query.Property(
-						gremlingo.Cardinality.Set,
-						k,
-						reflect.ValueOf(v).Index(i).Interface(),
-					)
-				}
-			} else {
-				for _, key := range reflect.ValueOf(v).MapKeys() {
-					query = query.Property(
-						gremlingo.Cardinality.Set,
-						k,
-						reflect.ValueOf(v).MapIndex(key).Interface(),
-					)
-				}
+			reflect.ValueOf(v).Kind() == reflect.Slice {
+			for i := range reflect.ValueOf(v).Len() {
+				query = query.Property(
+					gremlingo.Cardinality.Set,
+					k,
+					reflect.ValueOf(v).Index(i).Interface(),
+				)
 			}
 		} else {
 			query = query.Property(gremlingo.Cardinality.Single, k, v)

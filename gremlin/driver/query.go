@@ -384,13 +384,21 @@ func (q *Query[T]) Update(propertyName string, value any) error {
 	query.Property(cardinality.Single, gsmtypes.LastModified, time.Now().UTC())
 	switch fieldType.Kind() { //nolint: exhaustive // We are only handling slices and maps otherwise regular cardinality
 	case reflect.Slice:
+		err = q.resetProperty(query, propertyName)
+		if err != nil {
+			return err
+		}
 		cardinality := gremlingo.Cardinality.List
 		cardinalityString := "Cardinality.List"
 		if q.db.dbDriver == Neptune {
 			cardinalityString = "Cardinality.Set"
 			cardinality = gremlingo.Cardinality.Set
 		}
-		sliceValue, _ := value.([]any)
+		rv := reflect.ValueOf(value)
+		sliceValue := make([]any, rv.Len())
+		for i := range rv.Len() {
+			sliceValue[i] = rv.Index(i).Interface()
+		}
 		for _, v := range sliceValue {
 			q.writeDebugString(".Property(")
 			q.writeDebugString(cardinalityString)
@@ -401,16 +409,6 @@ func (q *Query[T]) Update(propertyName string, value any) error {
 			q.writeDebugString(")")
 			query = query.Property(cardinality, propertyName, v)
 		}
-	case reflect.Map:
-		mapValue, _ := value.(map[any]any)
-		for k := range mapValue {
-			q.writeDebugString(".Property(Cardinality.Set, ")
-			q.writeDebugString(propertyName)
-			q.writeDebugString(", ")
-			q.writeDebugString(fmt.Sprintf("%v", k))
-			q.writeDebugString(")")
-			query = query.Property(gremlingo.Cardinality.Set, propertyName, k)
-		}
 	default:
 		q.writeDebugString(".Property(Cardinality.Single, ")
 		q.writeDebugString(propertyName)
@@ -420,6 +418,12 @@ func (q *Query[T]) Update(propertyName string, value any) error {
 		query = query.Property(gremlingo.Cardinality.Single, propertyName, value)
 	}
 	errChan := query.Iterate()
+	return <-errChan
+}
+
+func (q *Query[T]) resetProperty(query *gremlingo.GraphTraversal, propertyName string) error {
+	query = query.Clone()
+	errChan := query.Properties(propertyName).Drop().Iterate()
 	return <-errChan
 }
 
