@@ -12,7 +12,6 @@ import (
 	"time"
 
 	gremlingo "github.com/apache/tinkerpop/gremlin-go/v3/driver"
-	"github.com/charmbracelet/log"
 	"github.com/jbrusegaard/graph-struct-manager/comparator"
 	"github.com/jbrusegaard/graph-struct-manager/gsmtypes"
 )
@@ -38,7 +37,7 @@ type Query[T any] struct {
 	debugString    *strings.Builder
 	dedup          bool
 	ids            []any
-	label          string
+	labels         []any
 	limit          *int
 	offset         *int
 	orderBy        *OrderCondition
@@ -119,14 +118,14 @@ func NewQuery[T any](db *GremlinDriver) *Query[T] {
 	ids := make([]any, 0)
 	fields := collectGremlinTagFields(reflect.TypeOf(v))
 	fields = slices.Insert(fields, 0, true)
-	log.Info(fields)
+	labels := []any{label}
 	return &Query[T]{
 		conditions:     make([]*QueryCondition, 0),
 		db:             db,
 		debug:          os.Getenv("GSM_DEBUG") == "true",
 		debugString:    &queryAsString,
 		ids:            ids,
-		label:          label,
+		labels:         labels,
 		orderBy:        nil,
 		selectedFields: fields,
 		subTraversals:  make(map[string]*gremlingo.GraphTraversal),
@@ -230,6 +229,15 @@ func (q *Query[T]) Offset(offset int) *Query[T] {
 	q.writeDebugString(strconv.Itoa(offset))
 	q.writeDebugString(")")
 	q.offset = &offset
+	return q
+}
+
+// Labels adds labels to the query
+// This is useful when you need to filter by multiple labels
+// You can use this to speed up the query by using the graph index
+// Note this will override any label set via the Label() method or pre computed label
+func (q *Query[T]) Labels(labels ...string) *Query[T] {
+	q.labels = SliceToAnySlice(labels)
 	return q
 }
 
@@ -542,8 +550,8 @@ func (q *Query[T]) buildBaseQuery() *gremlingo.GraphTraversal {
 		query = q.db.g.V()
 	}
 
-	if q.label != "" {
-		query = query.HasLabel(q.label)
+	if len(q.labels) > 0 {
+		query = query.HasLabel(q.labels...)
 	}
 
 	q.addQueryConditions(query)
@@ -626,9 +634,13 @@ func (q *Query[T]) resetDebugStringForPreQuery() {
 	}
 	queryAsString := strings.Builder{}
 	queryAsString.WriteString("PreQuery()")
-	if q.label != "" {
+	if len(q.labels) > 0 {
+		labelStrings := make([]string, len(q.labels))
+		for i, label := range q.labels {
+			labelStrings[i], _ = label.(string)
+		}
 		queryAsString.WriteString(".HasLabel(")
-		queryAsString.WriteString(q.label)
+		queryAsString.WriteString(strings.Join(labelStrings, ","))
 		queryAsString.WriteString(")")
 	}
 	q.debugString = &queryAsString
