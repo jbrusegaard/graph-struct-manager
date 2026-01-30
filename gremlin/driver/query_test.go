@@ -656,4 +656,79 @@ func TestQuery(t *testing.T) {
 			t.Errorf("Expected ErrNotFound, got %v", err)
 		}
 	})
+	t.Run("Test Select", func(t *testing.T) {
+		t.Cleanup(cleanDB)
+		err = seedData(db, seededData)
+		if err != nil {
+			t.Error(err)
+		}
+		results, err := driver.Model[testVertexForUtils](db).Select("name").Find()
+		if err != nil {
+			t.Error(err)
+		}
+		if len(results) != len(seededData) {
+			t.Errorf("Expected %d results, got %d", len(seededData), len(results))
+		}
+		for _, result := range results {
+			if result.Name == "" {
+				t.Errorf("Expected name to be set, got %s", result.Name)
+			}
+			if result.ID == "" {
+				t.Errorf("Expected ID to be set, got %s", result.ID)
+			}
+			if result.ListTest != nil {
+				t.Errorf("Expected listTest to be nil, got %v", result.ListTest)
+			}
+			if result.Sort != 0 {
+				t.Errorf("Expected sort to be 0, got %d", result.Sort)
+			}
+		}
+	})
+	t.Run("Test Select with multiple fields", func(t *testing.T) {
+		t.Cleanup(cleanDB)
+		err = seedData(db, seededData)
+		if err != nil {
+			t.Error(err)
+		}
+		results, err := driver.Model[testVertexForUtils](db).Select("name", "sort").Find()
+		if err != nil {
+			t.Error(err)
+		}
+		if len(results) != len(seededData) {
+			t.Errorf("Expected %d results, got %d", len(seededData), len(results))
+		}
+		for _, result := range results {
+			if result.Name == "" || result.Sort == 0 {
+				t.Errorf("Expected name and sort to be set, got %s and %d", result.Name, result.Sort)
+			}
+		}
+	})
+	t.Run("Test select with random field names", func(t *testing.T) {
+		t.Cleanup(cleanDB)
+		err = seedData(db, seededData)
+		if err != nil {
+			t.Error(err)
+		}
+		results, err := driver.Model[testVertexForUtils](db).Select("randomField").Find()
+		if err != nil {
+			t.Error(err)
+		}
+		if len(results) != len(seededData) {
+			t.Errorf("Expected %d results, got %d", len(seededData), len(results))
+		}
+		for _, result := range results {
+			if result.ID == "" {
+				t.Errorf("Expected ID to be set, got %s", result.ID)
+			}
+			if result.Name != "" {
+				t.Errorf("Expected name to be empty, got %s", result.Name)
+			}
+			if result.Sort != 0 {
+				t.Errorf("Expected sort to be 0, got %d", result.Sort)
+			}
+			if result.ListTest != nil {
+				t.Errorf("Expected listTest to be nil, got %v", result.ListTest)
+			}
+		}
+	})
 }

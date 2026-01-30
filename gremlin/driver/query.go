@@ -30,19 +30,20 @@ var cardinality = gremlingo.Cardinality
 
 // Query represents a chainable query builder
 type Query[T any] struct {
-	db             *GremlinDriver
 	conditions     []*QueryCondition
+	db             *GremlinDriver
+	debug          bool
+	debugString    *strings.Builder
+	dedup          bool
 	ids            []any
 	label          string
 	limit          *int
 	offset         *int
-	rangeCondition *RangeCondition
-	preTraversal   *gremlingo.GraphTraversal
-	subTraversals  map[string]*gremlingo.GraphTraversal
 	orderBy        *OrderCondition
-	dedup          bool
-	debug          bool
-	debugString    *strings.Builder
+	preTraversal   *gremlingo.GraphTraversal
+	rangeCondition *RangeCondition
+	selectedFields []any
+	subTraversals  map[string]*gremlingo.GraphTraversal
 }
 
 type QueryCondition struct {
@@ -249,6 +250,23 @@ func (q *Query[T]) Range(lower int, upper int) *Query[T] {
 	return q
 }
 
+// Select adds selected fields to the query
+func (q *Query[T]) Select(fields ...string) *Query[T] {
+	if len(q.selectedFields) == 0 {
+		q.db.logger.Warn(
+			"Select was already defined secondary select will override original select!",
+		)
+	}
+	q.selectedFields = []any{true}
+	q.writeDebugString(".GSMFieldsSelect(")
+	q.writeDebugString(strings.Join(fields, ", "))
+	q.writeDebugString(")")
+	for _, field := range fields {
+		q.selectedFields = append(q.selectedFields, field)
+	}
+	return q
+}
+
 // OrderBy adds ordering to the query
 func (q *Query[T]) OrderBy(field string, order GremlinOrder) *Query[T] {
 	if q.orderBy != nil {
@@ -274,7 +292,11 @@ func (q *Query[T]) OrderBy(field string, order GremlinOrder) *Query[T] {
 func (q *Query[T]) Find() ([]T, error) {
 	q.writeDebugString(".ToList()")
 	query := q.buildBaseQuery()
-	query = ToMapTraversal(query, q.subTraversals, true)
+	if len(q.selectedFields) > 0 {
+		query = ToMapTraversal(query, q.subTraversals, q.selectedFields...)
+	} else {
+		query = ToMapTraversal(query, q.subTraversals, true)
+	}
 	query = q.doOrderSkipRange(query)
 	queryResults, err := query.ToList()
 	if err != nil {
@@ -301,7 +323,11 @@ func (q *Query[T]) Take() (T, error) {
 	q.writeDebugString(".Next()")
 	var v T
 	query := q.buildBaseQuery()
-	query = ToMapTraversal(query, q.subTraversals, true)
+	if len(q.selectedFields) > 0 {
+		query = ToMapTraversal(query, q.subTraversals, q.selectedFields...)
+	} else {
+		query = ToMapTraversal(query, q.subTraversals, true)
+	}
 	query = q.doOrderSkipRange(query)
 	result, err := query.Next()
 	if err != nil {
