@@ -6,11 +6,13 @@ import (
 	"maps"
 	"os"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	gremlingo "github.com/apache/tinkerpop/gremlin-go/v3/driver"
+	"github.com/charmbracelet/log"
 	"github.com/jbrusegaard/graph-struct-manager/comparator"
 	"github.com/jbrusegaard/graph-struct-manager/gsmtypes"
 )
@@ -105,6 +107,7 @@ func GetLabel[T any]() string {
 
 // NewQuery creates a new query builder for type T
 func NewQuery[T any](db *GremlinDriver) *Query[T] {
+	var v T
 	label := GetLabel[T]()
 	queryAsString := strings.Builder{}
 	queryAsString.WriteString("V()")
@@ -114,15 +117,19 @@ func NewQuery[T any](db *GremlinDriver) *Query[T] {
 		queryAsString.WriteString(")")
 	}
 	ids := make([]any, 0)
+	fields := collectGremlinTagFields(reflect.TypeOf(v))
+	fields = slices.Insert(fields, 0, true)
+	log.Info(fields)
 	return &Query[T]{
-		db:            db,
-		debugString:   &queryAsString,
-		ids:           ids,
-		conditions:    make([]*QueryCondition, 0),
-		label:         label,
-		orderBy:       nil,
-		subTraversals: make(map[string]*gremlingo.GraphTraversal),
-		debug:         os.Getenv("GSM_DEBUG") == "true",
+		conditions:     make([]*QueryCondition, 0),
+		db:             db,
+		debug:          os.Getenv("GSM_DEBUG") == "true",
+		debugString:    &queryAsString,
+		ids:            ids,
+		label:          label,
+		orderBy:        nil,
+		selectedFields: fields,
+		subTraversals:  make(map[string]*gremlingo.GraphTraversal),
 	}
 }
 
@@ -364,6 +371,56 @@ func (q *Query[T]) Count() (int, error) {
 		return 0, err
 	}
 	return num, nil
+}
+
+func collectGremlinTagFields(rt reflect.Type) []any { //nolint:gocognit
+	if rt == nil {
+		return nil
+	}
+	if rt.Kind() == reflect.Ptr {
+		rt = rt.Elem()
+	}
+	if rt.Kind() != reflect.Struct {
+		return nil
+	}
+
+	fields := make([]any, 0)
+	for i := range rt.NumField() {
+		field := rt.Field(i)
+
+		if field.Anonymous {
+			anonymousType := field.Type
+			if anonymousType.Kind() == reflect.Ptr {
+				anonymousType = anonymousType.Elem()
+			}
+			if anonymousType.Kind() == reflect.Struct {
+				fields = append(fields, collectGremlinTagFields(anonymousType)...)
+				continue
+			}
+		}
+
+		if field.PkgPath != "" {
+			continue
+		}
+
+		if field.Tag.Get(gsmtypes.GremlinSubTraversalTag) != "" {
+			continue
+		}
+
+		gremlinTag := field.Tag.Get(gsmtypes.GremlinTag)
+		if gremlinTag == "" || gremlinTag == "-" {
+			continue
+		}
+
+		tagParts := parseGremlinTag(gremlinTag)
+		if tagParts.unmapped || tagParts.name == "" || tagParts.name == "-" {
+			continue
+		}
+
+		fields = append(fields, tagParts.name)
+	}
+
+	return fields
 }
 
 // Delete deletes all matching results
