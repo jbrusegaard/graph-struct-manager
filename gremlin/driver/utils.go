@@ -426,3 +426,11 @@ func nextWithDefaultValue[T any](
 	}
 	return result, defaultVal, nil
 }
+
+func SliceToAnySlice[T any](slice []T) []any {
+	anySlice := make([]any, len(slice))
+	for i, v := range slice {
+		anySlice[i] = v
+	}
+	return anySlice
+}

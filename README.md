@@ -17,6 +17,8 @@ A type-safe, chainable query builder for Gremlin graph databases in Go. This ORM
   - [Where](#where)
   - [WhereTraversal](#wheretraversal)
   - [AddSubTraversal](#addsubtraversal)
+- [Labels](#labels)
+- [Select](#select)
   - [Dedup](#dedup)
   - [Limit](#limit)
   - [Offset](#offset)
@@ -546,6 +548,51 @@ user, err := GSM.Model[UserWithStats](db).
 - You can add multiple subtraversals to populate different fields in a single query
 - Subtraversals work with `Find()`, `First()`, and other query execution methods
 
+### Labels
+
+Overrides the vertex labels used in the query. By default, GSM uses your type's `Label()` implementation or the auto-generated snake_case label. `Labels()` lets you query against one or more specific labels, which is useful when you have a custom struct that only models some properties and you want to target a different label than the precomputed one.
+
+**Signature:**
+```go
+func (q *Query[T]) Labels(labels ...string) *Query[T]
+```
+
+**Examples:**
+```go
+// Query multiple labels
+results, err := GSM.Model[User](db).
+    Labels("user", "legacy_user").
+    Where("email", comparator.CONTAINS, "@example.com").
+    Find()
+
+// Use a different label than the struct's default
+results, err := GSM.Model[UserProjection](db).
+    Labels("user").
+    Find()
+```
+
+### Select
+
+Limits the fields loaded into your struct. `Select()` accepts variadic field names (gremlin tag names) and only those properties are hydrated; non-selected fields remain zero values. The ID is still populated so the struct can be mapped correctly.
+
+**Signature:**
+```go
+func (q *Query[T]) Select(fields ...string) *Query[T]
+```
+
+**Examples:**
+```go
+// Load only specific fields
+results, err := GSM.Model[User](db).
+    Select("name", "email").
+    Find()
+
+// Single field selection
+results, err := GSM.Model[User](db).
+    Select("name").
+    Find()
+```
+
 ### Dedup
 
 Removes duplicate results from the query.
@@ -986,6 +1033,18 @@ func advancedQueries(db *GSM.GremlinDriver) {
     activeUsers, err := GSM.Model[TestVertex](db).
         Where("status", comparator.WITHOUT, []any{"banned", "suspended", "deleted"}).
         Where("lastLogin", comparator.GTE, thirtyDaysAgo).
+        Find()
+
+    // Labels override the default struct label
+    legacyUsers, err := GSM.Model[TestVertex](db).
+        Labels("user", "legacy_user").
+        Where("status", comparator.EQ, "active").
+        Find()
+
+    // Select only a subset of fields
+    userNames, err := GSM.Model[TestVertex](db).
+        Select("name", "email").
+        Where("status", comparator.EQ, "active").
         Find()
 
     // Count and statistics

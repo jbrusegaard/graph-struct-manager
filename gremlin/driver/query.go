@@ -6,6 +6,7 @@ import (
 	"maps"
 	"os"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -30,19 +31,20 @@ var cardinality = gremlingo.Cardinality
 
 // Query represents a chainable query builder
 type Query[T any] struct {
-	db             *GremlinDriver
 	conditions     []*QueryCondition
-	ids            []any
-	label          string
-	limit          *int
-	offset         *int
-	rangeCondition *RangeCondition
-	preTraversal   *gremlingo.GraphTraversal
-	subTraversals  map[string]*gremlingo.GraphTraversal
-	orderBy        *OrderCondition
-	dedup          bool
+	db             *GremlinDriver
 	debug          bool
 	debugString    *strings.Builder
+	dedup          bool
+	ids            []any
+	labels         []any
+	limit          *int
+	offset         *int
+	orderBy        *OrderCondition
+	preTraversal   *gremlingo.GraphTraversal
+	rangeCondition *RangeCondition
+	selectedFields []any
+	subTraversals  map[string]*gremlingo.GraphTraversal
 }
 
 type QueryCondition struct {
@@ -104,6 +106,7 @@ func GetLabel[T any]() string {
 
 // NewQuery creates a new query builder for type T
 func NewQuery[T any](db *GremlinDriver) *Query[T] {
+	var v T
 	label := GetLabel[T]()
 	queryAsString := strings.Builder{}
 	queryAsString.WriteString("V()")
@@ -113,15 +116,19 @@ func NewQuery[T any](db *GremlinDriver) *Query[T] {
 		queryAsString.WriteString(")")
 	}
 	ids := make([]any, 0)
+	fields := collectGremlinTagFields(reflect.TypeOf(v))
+	fields = slices.Insert(fields, 0, true)
+	labels := []any{label}
 	return &Query[T]{
-		db:            db,
-		debugString:   &queryAsString,
-		ids:           ids,
-		conditions:    make([]*QueryCondition, 0),
-		label:         label,
-		orderBy:       nil,
-		subTraversals: make(map[string]*gremlingo.GraphTraversal),
-		debug:         os.Getenv("GSM_DEBUG") == "true",
+		conditions:     make([]*QueryCondition, 0),
+		db:             db,
+		debug:          os.Getenv("GSM_DEBUG") == "true",
+		debugString:    &queryAsString,
+		ids:            ids,
+		labels:         labels,
+		orderBy:        nil,
+		selectedFields: fields,
+		subTraversals:  make(map[string]*gremlingo.GraphTraversal),
 	}
 }
 
@@ -225,6 +232,15 @@ func (q *Query[T]) Offset(offset int) *Query[T] {
 	return q
 }
 
+// Labels adds labels to the query
+// This is useful when you need to filter by multiple labels
+// You can use this to speed up the query by using the graph index
+// Note this will override any label set via the Label() method or pre computed label
+func (q *Query[T]) Labels(labels ...string) *Query[T] {
+	q.labels = SliceToAnySlice(labels)
+	return q
+}
+
 // Range sets the range of the query
 // This is useful when you need to get a range of results
 // It will be ignored if offset is set
@@ -246,6 +262,23 @@ func (q *Query[T]) Range(lower int, upper int) *Query[T] {
 	q.writeDebugString(strconv.Itoa(upper))
 	q.writeDebugString(")")
 	q.rangeCondition = &RangeCondition{lower: lower, upper: upper}
+	return q
+}
+
+// Select adds selected fields to the query
+func (q *Query[T]) Select(fields ...string) *Query[T] {
+	if len(q.selectedFields) == 0 {
+		q.db.logger.Warn(
+			"Select was already defined secondary select will override original select!",
+		)
+	}
+	q.selectedFields = []any{true}
+	q.writeDebugString(".GSMFieldsSelect(")
+	q.writeDebugString(strings.Join(fields, ", "))
+	q.writeDebugString(")")
+	for _, field := range fields {
+		q.selectedFields = append(q.selectedFields, field)
+	}
 	return q
 }
 
@@ -274,7 +307,11 @@ func (q *Query[T]) OrderBy(field string, order GremlinOrder) *Query[T] {
 func (q *Query[T]) Find() ([]T, error) {
 	q.writeDebugString(".ToList()")
 	query := q.buildBaseQuery()
-	query = ToMapTraversal(query, q.subTraversals, true)
+	if len(q.selectedFields) > 0 {
+		query = ToMapTraversal(query, q.subTraversals, q.selectedFields...)
+	} else {
+		query = ToMapTraversal(query, q.subTraversals, true)
+	}
 	query = q.doOrderSkipRange(query)
 	queryResults, err := query.ToList()
 	if err != nil {
@@ -301,7 +338,11 @@ func (q *Query[T]) Take() (T, error) {
 	q.writeDebugString(".Next()")
 	var v T
 	query := q.buildBaseQuery()
-	query = ToMapTraversal(query, q.subTraversals, true)
+	if len(q.selectedFields) > 0 {
+		query = ToMapTraversal(query, q.subTraversals, q.selectedFields...)
+	} else {
+		query = ToMapTraversal(query, q.subTraversals, true)
+	}
 	query = q.doOrderSkipRange(query)
 	result, err := query.Next()
 	if err != nil {
@@ -338,6 +379,56 @@ func (q *Query[T]) Count() (int, error) {
 		return 0, err
 	}
 	return num, nil
+}
+
+func collectGremlinTagFields(rt reflect.Type) []any { //nolint:gocognit
+	if rt == nil {
+		return nil
+	}
+	if rt.Kind() == reflect.Ptr {
+		rt = rt.Elem()
+	}
+	if rt.Kind() != reflect.Struct {
+		return nil
+	}
+
+	fields := make([]any, 0)
+	for i := range rt.NumField() {
+		field := rt.Field(i)
+
+		if field.Anonymous {
+			anonymousType := field.Type
+			if anonymousType.Kind() == reflect.Ptr {
+				anonymousType = anonymousType.Elem()
+			}
+			if anonymousType.Kind() == reflect.Struct {
+				fields = append(fields, collectGremlinTagFields(anonymousType)...)
+				continue
+			}
+		}
+
+		if field.PkgPath != "" {
+			continue
+		}
+
+		if field.Tag.Get(gsmtypes.GremlinSubTraversalTag) != "" {
+			continue
+		}
+
+		gremlinTag := field.Tag.Get(gsmtypes.GremlinTag)
+		if gremlinTag == "" || gremlinTag == "-" {
+			continue
+		}
+
+		tagParts := parseGremlinTag(gremlinTag)
+		if tagParts.unmapped || tagParts.name == "" || tagParts.name == "-" {
+			continue
+		}
+
+		fields = append(fields, tagParts.name)
+	}
+
+	return fields
 }
 
 // Delete deletes all matching results
@@ -459,8 +550,8 @@ func (q *Query[T]) buildBaseQuery() *gremlingo.GraphTraversal {
 		query = q.db.g.V()
 	}
 
-	if q.label != "" {
-		query = query.HasLabel(q.label)
+	if len(q.labels) > 0 {
+		query = query.HasLabel(q.labels...)
 	}
 
 	q.addQueryConditions(query)
@@ -543,9 +634,13 @@ func (q *Query[T]) resetDebugStringForPreQuery() {
 	}
 	queryAsString := strings.Builder{}
 	queryAsString.WriteString("PreQuery()")
-	if q.label != "" {
+	if len(q.labels) > 0 {
+		labelStrings := make([]string, len(q.labels))
+		for i, label := range q.labels {
+			labelStrings[i], _ = label.(string)
+		}
 		queryAsString.WriteString(".HasLabel(")
-		queryAsString.WriteString(q.label)
+		queryAsString.WriteString(strings.Join(labelStrings, ","))
 		queryAsString.WriteString(")")
 	}
 	q.debugString = &queryAsString
