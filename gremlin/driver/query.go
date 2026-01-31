@@ -56,7 +56,7 @@ type QueryCondition struct {
 
 func (qc *QueryCondition) String() string {
 	if qc.traversal != nil {
-		return ""
+		return ".Where(User Passed Traversal)"
 	}
 
 	if qc.field == "id" {
@@ -87,8 +87,20 @@ func (qc *QueryCondition) String() string {
 	case comparator.WITHOUT:
 		sb.WriteString("P.Without(")
 	}
-
-	sb.WriteString(fmt.Sprintf("%v))", qc.value))
+	value := reflect.ValueOf(qc.value)
+	// Check if qc.value is a slice
+	if value.IsValid() && value.Kind() == reflect.Slice {
+		// iterate over the slice and append the value to the sb
+		for i := range value.Len() {
+			sb.WriteString(fmt.Sprintf("%v ", value.Index(i).Interface()))
+			if i != value.Len()-1 {
+				sb.WriteString(", ")
+			}
+		}
+	} else {
+		sb.WriteString(fmt.Sprintf("%v", qc.value))
+	}
+	sb.WriteString(")")
 	return sb.String()
 }
 
@@ -588,7 +600,7 @@ func (q *Query[T]) doOrderSkipRange(query *gremlingo.GraphTraversal) *gremlingo.
 	return query
 }
 
-func (q *Query[T]) addQueryConditions(query *gremlingo.GraphTraversal) {
+func (q *Query[T]) addQueryConditions(query *gremlingo.GraphTraversal) { //nolint:gocognit
 	// Apply conditions
 	for _, condition := range q.conditions {
 		if condition.traversal != nil {
@@ -612,17 +624,24 @@ func (q *Query[T]) addQueryConditions(query *gremlingo.GraphTraversal) {
 			query = query.Has(condition.field, gremlingo.P.Lt(condition.value))
 		case comparator.LTE, "lte":
 			query = query.Has(condition.field, gremlingo.P.Lte(condition.value))
-		case comparator.IN:
-			if slice, ok := condition.value.([]any); ok {
-				query = query.Has(condition.field, gremlingo.P.Within(slice...))
-			}
 		case comparator.CONTAINS:
 			if strVal, ok := condition.value.(string); ok {
 				query = query.Has(condition.field, gremlingo.TextP.Containing(strVal))
 			}
-		case comparator.WITHOUT:
-			if slice, ok := condition.value.([]any); ok {
-				query = query.Has(condition.field, gremlingo.P.Without(slice...))
+		case comparator.IN, comparator.WITHOUT:
+			var sliceValue []any
+			value := reflect.ValueOf(condition.value)
+			if value.IsValid() && value.Kind() == reflect.Slice {
+				for i := range value.Len() {
+					sliceValue = append(sliceValue, value.Index(i).Interface())
+				}
+			} else {
+				sliceValue = append(sliceValue, condition.value)
+			}
+			if comparator.WITHOUT == condition.operator {
+				query = query.Has(condition.field, gremlingo.P.Without(sliceValue))
+			} else {
+				query = query.Has(condition.field, gremlingo.P.Within(sliceValue))
 			}
 		}
 	}
