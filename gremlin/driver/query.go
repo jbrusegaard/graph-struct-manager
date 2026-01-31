@@ -56,7 +56,7 @@ type QueryCondition struct {
 
 func (qc *QueryCondition) String() string {
 	if qc.traversal != nil {
-		return ""
+		return ".Where(User Passed Traversal)"
 	}
 
 	if qc.field == "id" {
@@ -87,8 +87,20 @@ func (qc *QueryCondition) String() string {
 	case comparator.WITHOUT:
 		sb.WriteString("P.Without(")
 	}
-
-	sb.WriteString(fmt.Sprintf("%v))", qc.value))
+	value := reflect.ValueOf(qc.value)
+	// Check if qc.value is a slice
+	if value.IsValid() && value.Kind() == reflect.Slice {
+		// iterate over the slice and append the value to the sb
+		for i := range value.Len() {
+			sb.WriteString(fmt.Sprintf("%v ", value.Index(i).Interface()))
+			if i != value.Len()-1 {
+				sb.WriteString(", ")
+			}
+		}
+	} else {
+		sb.WriteString(fmt.Sprintf("%v", qc.value))
+	}
+	sb.WriteString(")")
 	return sb.String()
 }
 
