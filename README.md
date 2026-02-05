@@ -57,20 +57,26 @@ type TestVertex struct {
 ### Capturing unmapped properties
 
 Gremlin is schema-less, so results can include properties not represented in your struct. To preserve
-them, add a map field tagged with `gremlin:"-,unmapped"`.
+them, implement `gsmtypes.UnmappedPropertiesType` to receive unmapped properties during result
+unpacking.
 
 ```go
 type User struct {
     types.Vertex
-    Name   string         `gremlin:"name"`
-    Email  string         `gremlin:"email"`
-    Extras map[string]any `gremlin:"-,unmapped"`
+    Name     string         `gremlin:"name"`
+    Email    string         `gremlin:"email"`
+    Unmapped map[string]any `gremlin:"-"`
+}
+
+func (u *User) SetUnmappedProperties(props map[string]any) {
+    u.Unmapped = props
 }
 ```
 
 All properties returned by Gremlin that do not match a `gremlin` or `gremlinSubTraversal` tag will
-be collected into the `Extras` map. You can mark multiple fields as `gremlin:"-,unmapped"`, but
-each will receive a copy of the same data, which is memory-inefficient.
+be collected into the map you set in `SetUnmappedProperties(map[string]any)`. When this interface
+is implemented, GSM avoids auto-selecting fields so that all properties are returned, then calls
+`SetUnmappedProperties` during unpacking.
 
 ### Using omitempty
 
