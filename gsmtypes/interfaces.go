@@ -20,3 +20,7 @@ type EdgeType interface {
 type CustomLabelType interface {
 	Label() string
 }
+
+type UnmappedPropertiesType interface {
+	SetUnmappedProperties(properties map[string]any)
+}

@@ -118,7 +118,6 @@ func GetLabel[T any]() string {
 
 // NewQuery creates a new query builder for type T
 func NewQuery[T any](db *GremlinDriver) *Query[T] {
-	var v T
 	label := GetLabel[T]()
 	queryAsString := strings.Builder{}
 	queryAsString.WriteString("V()")
@@ -128,8 +127,14 @@ func NewQuery[T any](db *GremlinDriver) *Query[T] {
 		queryAsString.WriteString(")")
 	}
 	ids := make([]any, 0)
-	fields := collectGremlinTagFields(reflect.TypeOf(v))
-	fields = slices.Insert(fields, 0, true)
+	modelType := reflect.TypeFor[T]()
+	var fields []any
+	if !typeImplementsUnmappedProperties(modelType) {
+		fields = collectGremlinTagFields(modelType)
+		if len(fields) > 0 {
+			fields = slices.Insert(fields, 0, true)
+		}
+	}
 	labels := []any{label}
 	return &Query[T]{
 		conditions:     make([]*QueryCondition, 0),

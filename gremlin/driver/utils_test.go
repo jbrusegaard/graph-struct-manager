@@ -73,17 +73,36 @@ type testVertexWithExtras struct {
 	Extras map[string]any `json:"extras" gremlin:"-,unmapped"`
 }
 
+func (t *testVertexWithExtras) SetUnmappedProperties(props map[string]any) {
+	t.Extras = props
+}
+
 type testVertexWithMultipleExtras struct {
 	gsmtypes.Vertex
 	Name     string         `json:"name"     gremlin:"name"`
-	Extras   map[string]any `json:"extras"   gremlin:"-,unmapped"`
-	ExtrasV2 map[string]any `json:"extrasV2" gremlin:"-,unmapped"`
+	Extras   map[string]any `json:"extras"  `
+	ExtrasV2 map[string]any `json:"extrasV2"`
+}
+
+func (t *testVertexWithMultipleExtras) SetUnmappedProperties(props map[string]any) {
+	t.Extras = props
+	t.ExtrasV2 = props
 }
 
 type testVertexWithInvalidExtras struct {
 	gsmtypes.Vertex
 	Name   string            `json:"name"   gremlin:"name"`
 	Extras map[string]string `json:"extras" gremlin:"-,unmapped"`
+}
+
+type testVertexWithUnmappedInterface struct {
+	gsmtypes.Vertex
+	Name     string         `json:"name" gremlin:"name"`
+	Unmapped map[string]any `json:"unmapped"`
+}
+
+func (t *testVertexWithUnmappedInterface) SetUnmappedProperties(props map[string]any) {
+	t.Unmapped = props
 }
 
 type testVertexWithSubTraversalPreference struct {
@@ -240,6 +259,33 @@ func TestUtils(t *testing.T) {
 			}
 			if v.Extras != nil {
 				t.Errorf("Extras should remain nil when type is unsupported")
+			}
+		},
+	)
+	t.Run(
+		"TestUnloadGremlinResultIntoStructUnmappedInterface", func(t *testing.T) {
+			t.Parallel()
+			var v testVertexWithUnmappedInterface
+			err := driver.UnloadGremlinResultIntoStruct(
+				&v, &gremlingo.Result{
+					Data: map[any]any{
+						"id":      "1",
+						"name":    "test",
+						"unknown": "extra",
+					},
+				},
+			)
+			if err != nil {
+				t.Errorf("Error unloading gremlin result into struct: %v", err)
+			}
+			if v.Unmapped == nil {
+				t.Errorf("Unmapped properties should not be nil")
+			}
+			if v.Unmapped["unknown"] != "extra" {
+				t.Errorf("Unmapped properties should contain unknown field")
+			}
+			if _, ok := v.Unmapped["name"]; ok {
+				t.Errorf("Unmapped properties should not contain mapped fields")
 			}
 		},
 	)

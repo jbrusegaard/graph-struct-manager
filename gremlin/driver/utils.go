@@ -74,7 +74,8 @@ func UnloadGremlinResultIntoStruct(
 	usedKeys := make(map[string]struct{}, len(stringMap))
 	extrasFields := make([]reflect.Value, 0)
 	recursivelyUnloadIntoStruct(v, stringMap, usedKeys, &extrasFields)
-	if len(extrasFields) > 0 {
+	unmappedCollector, collectUnmapped := v.(gsmtypes.UnmappedPropertiesType)
+	if collectUnmapped {
 		extras := make(map[string]any, len(stringMap))
 		for key, value := range stringMap {
 			if _, ok = usedKeys[key]; ok {
@@ -82,9 +83,23 @@ func UnloadGremlinResultIntoStruct(
 			}
 			extras[key] = value
 		}
-		setGremlinExtras(extrasFields, extras)
+		unmappedCollector.SetUnmappedProperties(extras)
 	}
 	return nil
+}
+
+func typeImplementsUnmappedProperties(rt reflect.Type) bool {
+	if rt == nil {
+		return false
+	}
+	unmappedType := reflect.TypeFor[gsmtypes.UnmappedPropertiesType]()
+	if rt.Implements(unmappedType) {
+		return true
+	}
+	if rt.Kind() != reflect.Ptr && reflect.PointerTo(rt).Implements(unmappedType) {
+		return true
+	}
+	return false
 }
 
 func recursivelyUnloadIntoStruct(
@@ -201,32 +216,6 @@ func setFieldFromValue(field reflect.Value, value any) {
 			reflect.ValueOf(value).Convert(field.Type().Elem()),
 		)
 		field.Set(slice)
-	}
-}
-
-func setGremlinExtras(extrasFields []reflect.Value, extras map[string]any) {
-	if len(extrasFields) == 0 {
-		return
-	}
-	anyType := reflect.TypeFor[any]()
-	for _, extrasField := range extrasFields {
-		if !extrasField.IsValid() {
-			continue
-		}
-		if !extrasField.CanSet() {
-			continue
-		}
-		if extrasField.Kind() != reflect.Map || extrasField.Type().Key().Kind() != reflect.String {
-			continue
-		}
-		if extrasField.Type().Elem() != anyType {
-			continue
-		}
-		extrasValue := reflect.MakeMapWithSize(extrasField.Type(), len(extras))
-		for key, value := range extras {
-			extrasValue.SetMapIndex(reflect.ValueOf(key), reflect.ValueOf(value))
-		}
-		extrasField.Set(extrasValue)
 	}
 }
 
