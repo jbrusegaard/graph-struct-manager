@@ -24,11 +24,16 @@ func getSlicePropertyNames(propertyMap map[string]any) []any {
 }
 
 func updateVertex[T any](db *GremlinDriver, value *T) error {
+	vertex, ok := any(value).(gsmtypes.VertexType)
+	if !ok {
+		return errors.New("value does not implement VertexType")
+	}
+	now := time.Now().UTC()
+	vertex.SetVertexLastModified(now)
 	err := runBeforeUpdateHook(db, value)
 	if err != nil {
 		return err
 	}
-	now := time.Now().UTC()
 	mapValue, err := structToMap(value)
 	if err != nil {
 		return err
@@ -40,7 +45,6 @@ func updateVertex[T any](db *GremlinDriver, value *T) error {
 	}
 	id := mapValue["id"]
 	delete(mapValue, "id")
-	mapValue[gsmtypes.LastModified] = now
 	label := GetLabel[T]()
 	slicePropertyNames := getSlicePropertyNames(mapValue)
 	errChan := db.g.V(id).HasLabel(label).Properties(slicePropertyNames...).Drop().Iterate()
@@ -53,20 +57,21 @@ func updateVertex[T any](db *GremlinDriver, value *T) error {
 	if err != nil {
 		return err
 	}
-	vertex, ok := any(value).(gsmtypes.VertexType)
-	if !ok {
-		return errors.New("value does not implement VertexType")
-	}
-	vertex.SetVertexLastModified(now)
 	return runAfterUpdateHook(db, value)
 }
 
 func createVertex[T any](db *GremlinDriver, value *T) error {
+	vertex, ok := any(value).(gsmtypes.VertexType)
+	if !ok {
+		return errors.New("value does not implement VertexType")
+	}
+	now := time.Now().UTC()
+	vertex.SetVertexCreatedAt(now)
+	vertex.SetVertexLastModified(now)
 	err := runBeforeCreateHook(db, value)
 	if err != nil {
 		return err
 	}
-	now := time.Now().UTC()
 	mapValue, err := structToMap(value)
 	if err != nil {
 		return err
@@ -82,8 +87,6 @@ func createVertex[T any](db *GremlinDriver, value *T) error {
 	}
 
 	label := GetLabel[T]()
-	mapValue[gsmtypes.LastModified] = now
-	mapValue[gsmtypes.CreatedAt] = now
 	query := db.g.AddV(label)
 	query = handlePropertyUpdate(db, mapValue, query)
 	if hasID {
@@ -93,14 +96,7 @@ func createVertex[T any](db *GremlinDriver, value *T) error {
 	if err != nil {
 		return err
 	}
-
-	vertex, ok := any(value).(gsmtypes.VertexType)
-	if !ok {
-		return errors.New("value does not implement VertexType")
-	}
 	vertex.SetVertexID(vertexID.GetInterface())
-	vertex.SetVertexCreatedAt(now)
-	vertex.SetVertexLastModified(now)
 	return runAfterCreateHook(db, value)
 }
 
