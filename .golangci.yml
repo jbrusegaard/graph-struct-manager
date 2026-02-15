@@ -83,7 +83,7 @@ linters:
     forbidigo:
       forbid:
         - pattern: ^(fmt|log)\.Print.*$
-          msg: Use gsmlog.Info|Debug|Warn|Error|Fatal|Panic instead of fmt.Print*|gsmlog.Print*
+          msg: Use log.Info|Debug|Warn|Error|Fatal|Panic instead of fmt.Print*|log.Print*
     funlen:
       lines: 100
       statements: 50
