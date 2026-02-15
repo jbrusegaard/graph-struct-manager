@@ -96,6 +96,10 @@ linters:
           paramsOnly: false
         underef:
           skipRecvDeref: false
+    revive:
+      rules:
+        - name: var-naming
+          disabled: true
     gomodguard:
       blocked:
         modules:

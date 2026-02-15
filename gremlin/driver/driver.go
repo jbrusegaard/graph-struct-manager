@@ -32,13 +32,15 @@ type QueryOpts struct {
 }
 
 type Config struct {
-	Driver      DatabaseDriver
-	IDGenerator func() any
+	Driver                    DatabaseDriver
+	IDGenerator               func() any
+	GremlinConnectionSettings func(settings *gremlingo.DriverRemoteConnectionSettings)
 }
 
 var defaultDriverConfig = Config{
-	Driver:      Gremlin,
-	IDGenerator: nil,
+	Driver:                    Gremlin,
+	IDGenerator:               nil,
+	GremlinConnectionSettings: nil,
 }
 
 /*
@@ -51,15 +53,27 @@ func g(remoteConnection *gremlingo.DriverRemoteConnection) *gremlingo.GraphTrave
 func Open(url string, config ...Config) (*GremlinDriver, error) {
 	driverLogger := appLogger.InitializeLogger()
 	driverLogger.Infof("Opening driver with url: %s/gremlin", url)
-	remote, err := gremlingo.NewDriverRemoteConnection(fmt.Sprintf("%s/gremlin", url))
-	if err != nil {
-		return nil, err
-	}
 	var configStruct Config
+	var remote *gremlingo.DriverRemoteConnection
+	var err error
 	if len(config) > 0 {
 		configStruct = config[0]
 	} else {
 		configStruct = defaultDriverConfig
+	}
+	if configStruct.GremlinConnectionSettings == nil {
+		remote, err = gremlingo.NewDriverRemoteConnection(fmt.Sprintf("%s/gremlin", url))
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		remote, err = gremlingo.NewDriverRemoteConnection(
+			fmt.Sprintf("%s/gremlin", url),
+			configStruct.GremlinConnectionSettings,
+		)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	driver := &GremlinDriver{
