@@ -83,7 +83,7 @@ linters:
     forbidigo:
       forbid:
         - pattern: ^(fmt|log)\.Print.*$
-          msg: Use log.Info|Debug|Warn|Error|Fatal|Panic instead of fmt.Print*|log.Print*
+          msg: Use gsmlog.Info|Debug|Warn|Error|Fatal|Panic instead of fmt.Print*|gsmlog.Print*
     funlen:
       lines: 100
       statements: 50
@@ -96,6 +96,10 @@ linters:
           paramsOnly: false
         underef:
           skipRecvDeref: false
+    revive:
+      rules:
+        - name: var-naming
+          disabled: true
     gomodguard:
       blocked:
         modules:
