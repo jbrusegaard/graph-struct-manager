@@ -37,10 +37,6 @@ func getStructName[T any]() (string, error) {
 }
 
 // UnloadGremlinResultIntoStruct unloads a gremlin result into a struct
-// it will recursively unload the result into the struct
-// v any must be a pointer to a struct
-// result *gremlingo.Result is the gremlin result to unload which must be a map
-// note the struct must have gremlin tags on the fields to be unloaded
 func UnloadGremlinResultIntoStruct(
 	v any,
 	result *gremlingo.Result,
@@ -48,46 +44,63 @@ func UnloadGremlinResultIntoStruct(
 	if result == nil {
 		return errors.New("gremlin result is nil")
 	}
+
 	mapResult, ok := result.GetInterface().(map[any]any)
 	if !ok {
 		return errors.New("result is not a map")
 	}
-	// make string map
-	stringMap := make(map[string]any, len(mapResult))
-	for key, value := range mapResult {
-		keyStr, keyOk := key.(string)
-		if !keyOk {
-			return errors.New("gremlin key is not a string")
-		}
-		stringMap[keyStr] = value
-	}
+
 	rv := reflect.ValueOf(v)
-
-	if rv.Kind() != reflect.Ptr {
-		return errors.New("v must be a pointer")
-	}
-
-	if rv.IsNil() {
+	if rv.Kind() != reflect.Ptr || rv.IsNil() {
 		return errors.New("v must be a non-nil pointer")
 	}
 
-	usedKeys := make(map[string]struct{}, len(stringMap))
-	extrasFields := make([]reflect.Value, 0)
-	recursivelyUnloadIntoStruct(v, stringMap, usedKeys, &extrasFields)
-	unmappedCollector, collectUnmapped := v.(gsmtypes.UnmappedPropertiesType)
-	if collectUnmapped {
-		extras := make(map[string]any, len(stringMap))
-		for key, value := range stringMap {
-			if _, ok = usedKeys[key]; ok {
+	usedKeys := make(map[string]struct{}, len(mapResult))
+
+	recursivelyUnloadIntoStruct(rv.Elem(), mapResult, usedKeys)
+
+	if unmappedCollector, ok2 := v.(gsmtypes.UnmappedPropertiesType); ok2 {
+		extras := make(map[string]any, len(mapResult)-len(usedKeys))
+		for key, value := range mapResult {
+			keyStr, strOk := key.(string)
+			if !strOk {
 				continue
 			}
-			extras[key] = value
+			if _, used := usedKeys[keyStr]; !used {
+				extras[keyStr] = value
+			}
 		}
 		unmappedCollector.SetUnmappedProperties(extras)
 	}
+
 	return nil
 }
 
+func recursivelyUnloadIntoStruct(
+	rv reflect.Value,
+	stringMap map[any]any,
+	usedKeys map[string]struct{},
+) {
+	rt := rv.Type()
+
+	for i := range rv.NumField() {
+		field := rv.Field(i)
+		fieldType := rt.Field(i)
+
+		if fieldType.Anonymous && field.Kind() == reflect.Struct {
+			recursivelyUnloadIntoStruct(field, stringMap, usedKeys)
+		}
+
+		unloadFieldFromResult(
+			field,
+			fieldType,
+			stringMap,
+			usedKeys,
+		)
+	}
+}
+
+// typeImplementsUnmappedProperties checks if the given type implements UnmappedPropertiesType
 func typeImplementsUnmappedProperties(rt reflect.Type) bool {
 	if rt == nil {
 		return false
@@ -102,62 +115,25 @@ func typeImplementsUnmappedProperties(rt reflect.Type) bool {
 	return false
 }
 
-func recursivelyUnloadIntoStruct(
-	v any,
-	stringMap map[string]any,
-	usedKeys map[string]struct{},
-	extrasFields *[]reflect.Value,
-) {
-	rv := reflect.ValueOf(v).Elem()
-	rt := rv.Type()
-
-	for i := range rv.NumField() {
-		field := rv.Field(i)
-		fieldType := rt.Field(i)
-		// handle anonymous Vertex field
-		if fieldType.Anonymous {
-			recursivelyUnloadIntoStruct(
-				field.Addr().Interface(),
-				stringMap,
-				usedKeys,
-				extrasFields,
-			)
-		}
-
-		unloadFieldFromResult(
-			field,
-			fieldType,
-			stringMap,
-			usedKeys,
-			extrasFields,
-		)
-	}
-}
-
 func unloadFieldFromResult(
 	field reflect.Value,
 	fieldType reflect.StructField,
-	stringMap map[string]any,
+	stringMap map[any]any,
 	usedKeys map[string]struct{},
-	extrasFields *[]reflect.Value,
 ) {
-	// Resolve and set a single struct field from the Gremlin result map.
-	gremlinTag := fieldType.Tag.Get(gsmtypes.GremlinTag)
-	gremlinSubTraversalTag := fieldType.Tag.Get(gsmtypes.GremlinSubTraversalTag)
 	if !field.CanInterface() || !field.CanSet() {
 		return
 	}
 
-	tagParts := gremlinTagOptions{name: gremlinTag}
-	if gremlinTag != "" {
-		tagParts = parseGremlinTag(gremlinTag)
-	}
-	if tagParts.unmapped {
-		captureUnmappedField(field, extrasFields)
-		return
+	gremlinTag := fieldType.Tag.Get(gsmtypes.GremlinTag)
+	gremlinSubTraversalTag := fieldType.Tag.Get(gsmtypes.GremlinSubTraversalTag)
+
+	tagName := gremlinTag
+	if tagName != "" && tagName != "-" {
+		parts := parseGremlinTag(gremlinTag)
+		tagName = parts.name
 	}
 
-	tagName := tagParts.name
 	if (tagName == "" || tagName == "-") &&
 		(gremlinSubTraversalTag == "" || gremlinSubTraversalTag == "-") {
 		return
@@ -169,16 +145,12 @@ func unloadFieldFromResult(
 	}
 
 	usedKeys[selectedKey] = struct{}{}
-	setFieldFromValue(field, stringMap[selectedKey])
+
+	value := stringMap[selectedKey]
+	setFieldFromValue(field, value)
 }
 
-func captureUnmappedField(field reflect.Value, extrasFields *[]reflect.Value) {
-	// Collect all fields marked to receive unmapped properties.
-	*extrasFields = append(*extrasFields, field)
-}
-
-func selectGremlinKey(tagName, subTraversalTag string, stringMap map[string]any) (string, bool) {
-	// Pick the key to use (subtraversal wins if present in the result).
+func selectGremlinKey(tagName, subTraversalTag string, stringMap map[any]any) (string, bool) {
 	if subTraversalTag != "" && subTraversalTag != "-" {
 		if _, ok := stringMap[subTraversalTag]; ok {
 			return subTraversalTag, true
@@ -193,28 +165,158 @@ func selectGremlinKey(tagName, subTraversalTag string, stringMap map[string]any)
 }
 
 func setFieldFromValue(field reflect.Value, value any) {
-	// Assign a Gremlin value into a field, handling slice conversions.
-	gType := reflect.TypeOf(value)
+	if !field.CanSet() {
+		return
+	}
 
-	switch {
-	case gType.ConvertibleTo(field.Type()):
-		field.Set(reflect.ValueOf(value).Convert(field.Type()))
-	case gType.Kind() == reflect.Slice:
-		strSlice := value.([]any) //nolint:errcheck // we already validated via reflect type check
-		slice := reflect.MakeSlice(
-			field.Type(), len(strSlice), len(strSlice),
-		)
-		for i, v := range strSlice {
-			slice.Index(i).Set(reflect.ValueOf(v).Convert(field.Type().Elem()))
+	gType := reflect.TypeOf(value)
+	if gType == nil {
+		return
+	}
+
+	targetType := field.Type()
+
+	// Direct assignment - most common case
+	if gType.AssignableTo(targetType) {
+		field.Set(reflect.ValueOf(value))
+		return
+	}
+
+	// Convertible types (e.g., string to string type, int to int64)
+	if gType.ConvertibleTo(targetType) {
+		field.Set(reflect.ValueOf(value).Convert(targetType))
+		return
+	}
+
+	// Handle float to int conversion
+	if isFloat(gType) && targetType.Kind() >= reflect.Int && targetType.Kind() <= reflect.Uint32 {
+		setFieldAsInt(field, value, gType, targetType)
+		return
+	}
+
+	// Handle slice conversions
+	if gType.Kind() == reflect.Slice {
+		handleSliceToSliceConversion(field, targetType, value)
+		return
+	}
+
+	if targetType.Kind() == reflect.Slice {
+		setFieldFromSingleValue(field, targetType, value, gType)
+	}
+}
+
+func isFloat(gType reflect.Type) bool {
+	return gType.Kind() == reflect.Float32 || gType.Kind() == reflect.Float64
+}
+
+func setFieldAsInt(field reflect.Value, value any, _ reflect.Type, targetType reflect.Type) {
+	fval := reflect.ValueOf(value).Float()
+	switch targetType.Kind() { //nolint:exhaustive // only handling int conversions
+	case reflect.Int:
+		field.SetInt(int64(fval))
+	case reflect.Int8:
+		field.SetInt(int64(fval))
+	case reflect.Int16:
+		field.SetInt(int64(fval))
+	case reflect.Int32:
+		field.SetInt(int64(fval))
+	case reflect.Uint:
+		field.SetUint(uint64(fval))
+	case reflect.Uint8:
+		field.SetUint(uint64(fval))
+	case reflect.Uint16:
+		field.SetUint(uint64(fval))
+	case reflect.Uint32:
+		field.SetUint(uint64(fval))
+	}
+}
+
+func handleSliceToSliceConversion(field reflect.Value, targetType reflect.Type, value any) {
+	strSlice := value.([]any) //nolint:errcheck // validated by caller via gType.Kind() check
+	slice := reflect.MakeSlice(targetType, len(strSlice), cap(strSlice))
+
+	elemType := targetType.Elem()
+	for i, v := range strSlice {
+		vType := reflect.TypeOf(v)
+		if vType == nil {
+			continue
+		}
+
+		// Handle float to int conversion for slice elements
+		if isFloat(vType) && elemType.Kind() >= reflect.Int && elemType.Kind() <= reflect.Uint32 {
+			fval := reflect.ValueOf(v).Float()
+			switch elemType.Kind() { //nolint:exhaustive // only handling int/uint types here
+			case reflect.Int:
+				slice.Index(i).SetInt(int64(fval))
+			case reflect.Int8:
+				slice.Index(i).SetInt(int64(fval))
+			case reflect.Int16:
+				slice.Index(i).SetInt(int64(fval))
+			case reflect.Int32:
+				slice.Index(i).SetInt(int64(fval))
+			case reflect.Uint:
+				slice.Index(i).SetUint(uint64(fval))
+			case reflect.Uint8:
+				slice.Index(i).SetUint(uint64(fval))
+			case reflect.Uint16:
+				slice.Index(i).SetUint(uint64(fval))
+			case reflect.Uint32:
+				slice.Index(i).SetUint(uint64(fval))
+			}
+			continue
+		}
+
+		if !vType.AssignableTo(elemType) && !vType.ConvertibleTo(elemType) {
+			continue
+		}
+		slice.Index(i).Set(reflect.ValueOf(v))
+		if vType.ConvertibleTo(elemType) {
+			slice.Index(i).Set(reflect.ValueOf(v).Convert(elemType))
+		}
+	}
+
+	field.Set(slice)
+}
+
+func setFieldFromSingleValue(
+	field reflect.Value,
+	targetType reflect.Type,
+	value any,
+	gType reflect.Type,
+) {
+	elemType := targetType.Elem()
+	slice := reflect.MakeSlice(targetType, 1, 1)
+
+	// Handle float to int conversion for single value to slice
+	if isFloat(gType) && elemType.Kind() >= reflect.Int && elemType.Kind() <= reflect.Uint32 {
+		fval := reflect.ValueOf(value).Float()
+		switch elemType.Kind() { //nolint:exhaustive // only handling int/uint types here
+		case reflect.Int:
+			slice.Index(0).SetInt(int64(fval))
+		case reflect.Int8:
+			slice.Index(0).SetInt(int64(fval))
+		case reflect.Int16:
+			slice.Index(0).SetInt(int64(fval))
+		case reflect.Int32:
+			slice.Index(0).SetInt(int64(fval))
+		case reflect.Uint:
+			slice.Index(0).SetUint(uint64(fval))
+		case reflect.Uint8:
+			slice.Index(0).SetUint(uint64(fval))
+		case reflect.Uint16:
+			slice.Index(0).SetUint(uint64(fval))
+		case reflect.Uint32:
+			slice.Index(0).SetUint(uint64(fval))
 		}
 		field.Set(slice)
-	case field.Type().Kind() == reflect.Slice && gType.ConvertibleTo(field.Type().Elem()):
-		// Handle case where field is a slice but gremlin result is a single value
-		// Create a slice with one element
-		slice := reflect.MakeSlice(field.Type(), 1, 1)
-		slice.Index(0).Set(
-			reflect.ValueOf(value).Convert(field.Type().Elem()),
-		)
+		return
+	}
+
+	if gType.AssignableTo(elemType) || gType.ConvertibleTo(elemType) {
+		slice.Index(0).Set(reflect.ValueOf(value))
+		if gType.ConvertibleTo(elemType) {
+			slice.Index(0).Set(reflect.ValueOf(value).Convert(elemType))
+		}
 		field.Set(slice)
 	}
 }
