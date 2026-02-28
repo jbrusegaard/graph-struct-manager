@@ -5,11 +5,86 @@ import (
 	"fmt"
 	"maps"
 	"reflect"
+	"sync"
 
 	gremlingo "github.com/apache/tinkerpop/gremlin-go/v3/driver"
 	"github.com/gobeam/stringy"
 	"github.com/jbrusegaard/graph-struct-manager/gsmtypes"
 )
+
+// cachedFieldInfo holds pre-computed metadata for a single struct field,
+// including fields flattened from anonymous embeddings.
+type cachedFieldInfo struct {
+	index           []int
+	gremlinTag      string
+	subTraversalTag string
+	isUnmapped      bool
+}
+
+type cachedStructInfo struct {
+	fields []cachedFieldInfo
+}
+
+var structInfoCache sync.Map
+
+func getStructInfo(rt reflect.Type) *cachedStructInfo {
+	if cached, ok := structInfoCache.Load(rt); ok {
+		res, _ := cached.(*cachedStructInfo)
+		return res
+	}
+	info := buildStructInfo(rt, nil)
+	actual, _ := structInfoCache.LoadOrStore(rt, info)
+	res, _ := actual.(*cachedStructInfo)
+	return res
+}
+
+func buildStructInfo(rt reflect.Type, parentIndex []int) *cachedStructInfo {
+	info := &cachedStructInfo{}
+	for i := range rt.NumField() {
+		field := rt.Field(i)
+		idx := make([]int, len(parentIndex)+1)
+		copy(idx, parentIndex)
+		idx[len(parentIndex)] = i
+
+		if field.Anonymous && field.Type.Kind() == reflect.Struct {
+			embedded := buildStructInfo(field.Type, idx)
+			info.fields = append(info.fields, embedded.fields...)
+			continue
+		}
+
+		if !field.IsExported() {
+			continue
+		}
+
+		gremlinTag := field.Tag.Get(gsmtypes.GremlinTag)
+		subTraversalTag := field.Tag.Get(gsmtypes.GremlinSubTraversalTag)
+
+		tagParts := gremlinTagOptions{name: gremlinTag}
+		if gremlinTag != "" {
+			tagParts = parseGremlinTag(gremlinTag)
+		}
+
+		if tagParts.unmapped {
+			info.fields = append(info.fields, cachedFieldInfo{
+				index:      idx,
+				isUnmapped: true,
+			})
+			continue
+		}
+
+		if (tagParts.name == "" || tagParts.name == "-") &&
+			(subTraversalTag == "" || subTraversalTag == "-") {
+			continue
+		}
+
+		info.fields = append(info.fields, cachedFieldInfo{
+			index:           idx,
+			gremlinTag:      tagParts.name,
+			subTraversalTag: subTraversalTag,
+		})
+	}
+	return info
+}
 
 var (
 	anonymousTraversal = gremlingo.T__
@@ -109,72 +184,24 @@ func recursivelyUnloadIntoStruct(
 	extrasFields *[]reflect.Value,
 ) {
 	rv := reflect.ValueOf(v).Elem()
-	rt := rv.Type()
+	info := getStructInfo(rv.Type())
 
-	for i := range rv.NumField() {
-		field := rv.Field(i)
-		fieldType := rt.Field(i)
-		// handle anonymous Vertex field
-		if fieldType.Anonymous {
-			recursivelyUnloadIntoStruct(
-				field.Addr().Interface(),
-				stringMap,
-				usedKeys,
-				extrasFields,
-			)
+	for i := range info.fields {
+		fi := &info.fields[i]
+		field := rv.FieldByIndex(fi.index)
+
+		if fi.isUnmapped {
+			*extrasFields = append(*extrasFields, field)
+			continue
 		}
 
-		unloadFieldFromResult(
-			field,
-			fieldType,
-			stringMap,
-			usedKeys,
-			extrasFields,
-		)
+		selectedKey, ok := selectGremlinKey(fi.gremlinTag, fi.subTraversalTag, stringMap)
+		if !ok {
+			continue
+		}
+		usedKeys[selectedKey] = struct{}{}
+		setFieldFromValue(field, stringMap[selectedKey])
 	}
-}
-
-func unloadFieldFromResult(
-	field reflect.Value,
-	fieldType reflect.StructField,
-	stringMap map[string]any,
-	usedKeys map[string]struct{},
-	extrasFields *[]reflect.Value,
-) {
-	// Resolve and set a single struct field from the Gremlin result map.
-	gremlinTag := fieldType.Tag.Get(gsmtypes.GremlinTag)
-	gremlinSubTraversalTag := fieldType.Tag.Get(gsmtypes.GremlinSubTraversalTag)
-	if !field.CanInterface() || !field.CanSet() {
-		return
-	}
-
-	tagParts := gremlinTagOptions{name: gremlinTag}
-	if gremlinTag != "" {
-		tagParts = parseGremlinTag(gremlinTag)
-	}
-	if tagParts.unmapped {
-		captureUnmappedField(field, extrasFields)
-		return
-	}
-
-	tagName := tagParts.name
-	if (tagName == "" || tagName == "-") &&
-		(gremlinSubTraversalTag == "" || gremlinSubTraversalTag == "-") {
-		return
-	}
-
-	selectedKey, ok := selectGremlinKey(tagName, gremlinSubTraversalTag, stringMap)
-	if !ok {
-		return
-	}
-
-	usedKeys[selectedKey] = struct{}{}
-	setFieldFromValue(field, stringMap[selectedKey])
-}
-
-func captureUnmappedField(field reflect.Value, extrasFields *[]reflect.Value) {
-	// Collect all fields marked to receive unmapped properties.
-	*extrasFields = append(*extrasFields, field)
 }
 
 func selectGremlinKey(tagName, subTraversalTag string, stringMap map[string]any) (string, bool) {
@@ -193,28 +220,38 @@ func selectGremlinKey(tagName, subTraversalTag string, stringMap map[string]any)
 }
 
 func setFieldFromValue(field reflect.Value, value any) {
-	// Assign a Gremlin value into a field, handling slice conversions.
-	gType := reflect.TypeOf(value)
+	if value == nil {
+		return
+	}
+
+	rv := reflect.ValueOf(value)
+	gType := rv.Type()
+	fType := field.Type()
+
+	if gType == fType {
+		field.Set(rv)
+		return
+	}
+
+	if fType.Kind() == reflect.Interface {
+		field.Set(rv)
+		return
+	}
 
 	switch {
-	case gType.ConvertibleTo(field.Type()):
-		field.Set(reflect.ValueOf(value).Convert(field.Type()))
+	case gType.ConvertibleTo(fType):
+		field.Set(rv.Convert(fType))
 	case gType.Kind() == reflect.Slice:
 		strSlice := value.([]any) //nolint:errcheck // we already validated via reflect type check
-		slice := reflect.MakeSlice(
-			field.Type(), len(strSlice), len(strSlice),
-		)
+		slice := reflect.MakeSlice(fType, len(strSlice), len(strSlice))
+		elemType := fType.Elem()
 		for i, v := range strSlice {
-			slice.Index(i).Set(reflect.ValueOf(v).Convert(field.Type().Elem()))
+			slice.Index(i).Set(reflect.ValueOf(v).Convert(elemType))
 		}
 		field.Set(slice)
-	case field.Type().Kind() == reflect.Slice && gType.ConvertibleTo(field.Type().Elem()):
-		// Handle case where field is a slice but gremlin result is a single value
-		// Create a slice with one element
-		slice := reflect.MakeSlice(field.Type(), 1, 1)
-		slice.Index(0).Set(
-			reflect.ValueOf(value).Convert(field.Type().Elem()),
-		)
+	case fType.Kind() == reflect.Slice && gType.ConvertibleTo(fType.Elem()):
+		slice := reflect.MakeSlice(fType, 1, 1)
+		slice.Index(0).Set(rv.Convert(fType.Elem()))
 		field.Set(slice)
 	}
 }

@@ -582,3 +582,48 @@ func TestUtils(t *testing.T) {
 		},
 	)
 }
+
+func BenchmarkUnloadGremlinResultIntoStruct(b *testing.B) {
+	now := time.Now().UTC()
+	result := &gremlingo.Result{
+		Data: map[any]any{
+			"id":                "bench-id-123",
+			"last_modified":     now,
+			"created_at":        now,
+			"name":              "benchmark",
+			"listTest":          []any{"a", "b", "c"},
+			"unmapped":          42,
+			"sort":              7,
+			"subTraversalTest":  "sub-val",
+			"subTraversalTest2": 99,
+		},
+	}
+
+	b.ResetTimer()
+	for b.Loop() {
+		var v testVertexForUtils
+		_ = driver.UnloadGremlinResultIntoStruct(&v, result)
+	}
+}
+
+func BenchmarkUnloadGremlinResultIntoStructWithExtras(b *testing.B) {
+	now := time.Now().UTC()
+	result := &gremlingo.Result{
+		Data: map[any]any{
+			"id":            "bench-id-123",
+			"last_modified": now,
+			"created_at":    now,
+			"name":          "benchmark",
+			"extra1":        "value1",
+			"extra2":        100,
+			"extra3":        true,
+			"extra4":        []any{"x", "y"},
+		},
+	}
+
+	b.ResetTimer()
+	for b.Loop() {
+		var v testVertexWithExtras
+		_ = driver.UnloadGremlinResultIntoStruct(&v, result)
+	}
+}
