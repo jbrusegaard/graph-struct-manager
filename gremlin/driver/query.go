@@ -92,13 +92,13 @@ func (qc *QueryCondition) String() string {
 	if value.IsValid() && value.Kind() == reflect.Slice {
 		// iterate over the slice and append the value to the sb
 		for i := range value.Len() {
-			sb.WriteString(fmt.Sprintf("%v ", value.Index(i).Interface()))
+			fmt.Fprintf(&sb, "%v ", value.Index(i).Interface())
 			if i != value.Len()-1 {
 				sb.WriteString(", ")
 			}
 		}
 	} else {
-		sb.WriteString(fmt.Sprintf("%v", qc.value))
+		fmt.Fprintf(&sb, "%v", qc.value)
 	}
 	sb.WriteString(")")
 	return sb.String()
