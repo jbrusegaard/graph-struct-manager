@@ -45,7 +45,7 @@ func updateVertex[T any](db *GremlinDriver, value *T) error {
 	}
 	id := mapValue["id"]
 	delete(mapValue, "id")
-	label := GetLabel[T]()
+	label := getLabelFromVertex(value)
 	slicePropertyNames := getSlicePropertyNames(mapValue)
 	errChan := db.g.V(id).HasLabel(label).Properties(slicePropertyNames...).Drop().Iterate()
 	if propResetErr := <-errChan; propResetErr != nil {
@@ -86,7 +86,7 @@ func createVertex[T any](db *GremlinDriver, value *T) error {
 		}
 	}
 
-	label := GetLabel[T]()
+	label := getLabelFromVertex(value)
 	query := db.g.AddV(label)
 	query = handlePropertyUpdate(db, mapValue, query)
 	if hasID {

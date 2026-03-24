@@ -136,3 +136,75 @@ func TestDriverSave(t *testing.T) {
 		t.Errorf("vertex name should be %s, got %s", testV.Name, vertex.Name)
 	}
 }
+
+type testVertexWithCustomLabel2 struct {
+	gsmtypes.Vertex
+	Name          string `json:"name" gremlin:"name"`
+	ComputedLabel string `json:"-" gremlin:"-"`
+}
+
+func (t *testVertexWithCustomLabel2) Label() string {
+	return t.ComputedLabel
+}
+
+func TestDriverSaveWithCustomLabel(t *testing.T) {
+	db, err := driver.Open(
+		DbURL, driver.Config{
+			Driver: dbDriver,
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	testV := &testVertexWithCustomLabel2{
+		Name:          "test",
+		ComputedLabel: "You cant figure this out right?",
+	}
+	err = driver.Create(db, testV)
+	if err != nil {
+		t.Error(err)
+	}
+	vertex, err := driver.Model[testVertexWithCustomLabel2](db).Labels("You cant figure this out right?").Take()
+	if err != nil {
+		t.Error(err)
+	}
+	if vertex.Name != testV.Name {
+		t.Errorf("vertex name should be %s, got %s", testV.Name, vertex.Name)
+	}
+}
+
+type testVertexWithCustomLabel3 struct {
+	gsmtypes.Vertex
+	Name string `json:"name" gremlin:"name"`
+}
+
+func (*testVertexWithCustomLabel3) Label() string {
+	return "some random label"
+}
+
+func TestDriverSaveWithCustomLabel3(t *testing.T) {
+	db, err := driver.Open(
+		DbURL, driver.Config{
+			Driver: dbDriver,
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	testV := &testVertexWithCustomLabel3{
+		Name: "some random label test",
+	}
+	err = driver.Create(db, testV)
+	if err != nil {
+		t.Error(err)
+	}
+	vertex, err := driver.Model[testVertexWithCustomLabel3](db).Take()
+	if err != nil {
+		t.Error(err)
+	}
+	if vertex.Name != testV.Name {
+		t.Errorf("vertex name should be %s, got %s", testV.Name, vertex.Name)
+	}
+}
