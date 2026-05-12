@@ -460,8 +460,9 @@ func (q *Query[T]) Delete() error {
 func (q *Query[T]) ID(id any) (T, error) {
 	var v T
 	query := q.db.g.V(id)
-	label := GetLabel[T]()
-	query = query.HasLabel(label)
+	if len(q.labels) > 0 {
+		query = query.HasLabel(q.labels...)
+	}
 	result, err := ToMapTraversal(query, q.subTraversals, true).Next()
 	if err != nil {
 		if isGremlinNotFoundErr(err) {

@@ -207,6 +207,45 @@ func TestQuery(t *testing.T) {
 	)
 
 	t.Run(
+		"TestIDWithInvalidLabel", func(t *testing.T) {
+			t.Cleanup(cleanDB)
+			err = seedData(db, seededData)
+			if err != nil {
+				t.Error(err)
+			}
+			model, err := driver.Model[testVertexForUtils](db).Take()
+			if err != nil {
+				t.Error(err)
+			}
+			_, err = driver.Model[testVertexForUtils](db).Labels("wrong_label").ID(model.ID)
+			if !errors.Is(err, gsmtypes.ErrNotFound) {
+				t.Errorf("Expected ErrNotFound when label doesn't match, got %v", err)
+			}
+		},
+	)
+	t.Run(
+		"TestIDRespectsLabels", func(t *testing.T) {
+			t.Cleanup(cleanDB)
+			err = seedData(db, seededData)
+			if err != nil {
+				t.Error(err)
+			}
+			model, err := driver.Model[testVertexForUtils](db).Take()
+			if err != nil {
+				t.Error(err)
+			}
+			// The default label for testVertexForUtils is "test_vertex_for_utils";
+			// querying with that explicit label should succeed.
+			result, err := driver.Model[testVertexForUtils](db).Labels("test_vertex_for_utils").ID(model.ID)
+			if err != nil {
+				t.Errorf("Expected success with correct explicit label, got %v", err)
+			}
+			if result.ID != model.ID {
+				t.Errorf("Expected ID %s, got %s", model.ID, result.ID)
+			}
+		},
+	)
+	t.Run(
 		"TestQueryUpdateBadInput", func(t *testing.T) {
 			t.Cleanup(cleanDB)
 			err = seedData(db, seededData)
