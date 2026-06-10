@@ -63,7 +63,7 @@ func UnloadGremlinResultIntoStruct(
 	}
 	rv := reflect.ValueOf(v)
 
-	if rv.Kind() != reflect.Ptr {
+	if rv.Kind() != reflect.Pointer {
 		return errors.New("v must be a pointer")
 	}
 
@@ -96,7 +96,7 @@ func typeImplementsUnmappedProperties(rt reflect.Type) bool {
 	if rt.Implements(unmappedType) {
 		return true
 	}
-	if rt.Kind() != reflect.Ptr && reflect.PointerTo(rt).Implements(unmappedType) {
+	if rt.Kind() != reflect.Pointer && reflect.PointerTo(rt).Implements(unmappedType) {
 		return true
 	}
 	return false
@@ -228,7 +228,7 @@ func getLabelFromVertex(value any) string {
 		} else {
 			customLabelType := reflect.TypeFor[gsmtypes.CustomLabelType]()
 			valueType := reflect.TypeOf(value)
-			if valueType != nil && valueType.Kind() != reflect.Ptr &&
+			if valueType != nil && valueType.Kind() != reflect.Pointer &&
 				reflect.PointerTo(valueType).Implements(customLabelType) {
 				pointerValue := reflect.New(valueType)
 				if pointerLabel, ptrOk := pointerValue.Interface().(gsmtypes.CustomLabelType); ptrOk {
@@ -245,7 +245,7 @@ func getLabelFromVertex(value any) string {
 		}
 		concreteType := concreteValue.Type()
 		// Handle pointer types
-		if concreteType.Kind() == reflect.Ptr {
+		if concreteType.Kind() == reflect.Pointer {
 			concreteType = concreteType.Elem()
 		}
 		return stringy.New(concreteType.Name()).SnakeCase().ToLower()
@@ -280,7 +280,7 @@ func structToMap( //nolint:gocognit
 	rv := reflect.ValueOf(value)
 
 	// Check if it's a pointer and get the underlying value
-	if rv.Kind() == reflect.Ptr {
+	if rv.Kind() == reflect.Pointer {
 		rv = rv.Elem()
 	}
 
@@ -329,7 +329,7 @@ func structToMap( //nolint:gocognit
 		}
 
 		// Check if field is a pointer and is nil (unset)
-		if fieldValue.Kind() == reflect.Ptr {
+		if fieldValue.Kind() == reflect.Pointer {
 			if fieldValue.IsNil() {
 				// Skip unset pointer fields
 				continue
@@ -357,7 +357,7 @@ func validateStructPointerWithAnonymousVertex(value any) error {
 	rv := reflect.ValueOf(value)
 
 	// Check if it's a pointer
-	if rv.Kind() != reflect.Ptr {
+	if rv.Kind() != reflect.Pointer {
 		return errors.New("value must be a pointer")
 	}
 
