@@ -33,6 +33,31 @@ func (t *testTopicWithSubscribers) Label() string {
 	return "test_topic"
 }
 
+type testPost struct {
+	gsmtypes.Vertex
+	Title string `json:"title" gremlin:"title"`
+}
+
+type testTopicWithPosts struct {
+	gsmtypes.Vertex
+	Title string     `json:"title" gremlin:"title"`
+	Posts []testPost `json:"posts"                 gremlinEdge:"contains"`
+}
+
+func (t *testTopicWithPosts) Label() string {
+	return "test_topic"
+}
+
+type testPersonNested struct {
+	gsmtypes.Vertex
+	Name   string               `json:"name"   gremlin:"name"`
+	Topics []testTopicWithPosts `json:"topics"                gremlinEdge:"subscribed"`
+}
+
+func (p *testPersonNested) Label() string {
+	return "test_person"
+}
+
 func addEdge(t *testing.T, db *driver.GremlinDriver, fromID any, label string, toID any) {
 	t.Helper()
 	err := <-db.G().V(fromID).AddE(label).To(gremlingo.T__.V(toID)).Iterate()
@@ -251,6 +276,184 @@ func TestPreload(t *testing.T) {
 			}
 			if len(result.Topics) != 2 {
 				t.Errorf("Expected 2 topics, got %d", len(result.Topics))
+			}
+		},
+	)
+
+	t.Run(
+		"TestPreloadNested", func(t *testing.T) {
+			t.Cleanup(cleanDB)
+			person := testPersonNested{Name: "alice"}
+			if err := driver.Create(db, &person); err != nil {
+				t.Fatal(err)
+			}
+			topics := []testTopicWithPosts{{Title: "graphs"}, {Title: "golang"}}
+			for i := range topics {
+				if err := driver.Create(db, &topics[i]); err != nil {
+					t.Fatal(err)
+				}
+				addEdge(t, db, person.ID, "subscribed", topics[i].ID)
+			}
+			// only the graphs topic has posts
+			posts := []testPost{{Title: "intro to gremlin"}, {Title: "traversal tricks"}}
+			for i := range posts {
+				if err := driver.Create(db, &posts[i]); err != nil {
+					t.Fatal(err)
+				}
+				addEdge(t, db, topics[0].ID, "contains", posts[i].ID)
+			}
+
+			result, err := driver.Model[testPersonNested](db).Preload("Topics.Posts").Take()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(result.Topics) != 2 {
+				t.Fatalf("Expected 2 topics, got %d", len(result.Topics))
+			}
+			sort.Slice(result.Topics, func(i, j int) bool {
+				return result.Topics[i].Title > result.Topics[j].Title
+			})
+			graphsTopic, golangTopic := result.Topics[0], result.Topics[1]
+			if graphsTopic.Title != "graphs" || golangTopic.Title != "golang" {
+				t.Fatalf("Expected graphs and golang topics, got %+v", result.Topics)
+			}
+			if graphsTopic.ID == nil {
+				t.Error("Expected nested topic ID to be loaded")
+			}
+			if len(graphsTopic.Posts) != 2 {
+				t.Fatalf("Expected 2 posts on graphs topic, got %d", len(graphsTopic.Posts))
+			}
+			sort.Slice(graphsTopic.Posts, func(i, j int) bool {
+				return graphsTopic.Posts[i].Title < graphsTopic.Posts[j].Title
+			})
+			if graphsTopic.Posts[0].Title != "intro to gremlin" ||
+				graphsTopic.Posts[1].Title != "traversal tricks" {
+				t.Errorf("Expected post titles to be loaded, got %+v", graphsTopic.Posts)
+			}
+			if graphsTopic.Posts[0].ID == nil {
+				t.Error("Expected nested post ID to be loaded")
+			}
+			if len(golangTopic.Posts) != 0 {
+				t.Errorf("Expected golang topic to have 0 posts, got %d", len(golangTopic.Posts))
+			}
+		},
+	)
+
+	t.Run(
+		"TestPreloadNestedMergesWithParentPreload", func(t *testing.T) {
+			t.Cleanup(cleanDB)
+			person := testPersonNested{Name: "alice"}
+			if err := driver.Create(db, &person); err != nil {
+				t.Fatal(err)
+			}
+			topic := testTopicWithPosts{Title: "graphs"}
+			if err := driver.Create(db, &topic); err != nil {
+				t.Fatal(err)
+			}
+			addEdge(t, db, person.ID, "subscribed", topic.ID)
+			post := testPost{Title: "intro to gremlin"}
+			if err := driver.Create(db, &post); err != nil {
+				t.Fatal(err)
+			}
+			addEdge(t, db, topic.ID, "contains", post.ID)
+
+			// separate Preload calls for the parent and the nested path merge
+			result, err := driver.Model[testPersonNested](db).
+				Preload("Topics").
+				Preload("Topics.Posts").
+				Take()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(result.Topics) != 1 {
+				t.Fatalf("Expected 1 topic, got %d", len(result.Topics))
+			}
+			if len(result.Topics[0].Posts) != 1 {
+				t.Fatalf("Expected 1 post, got %d", len(result.Topics[0].Posts))
+			}
+			if result.Topics[0].Posts[0].Title != "intro to gremlin" {
+				t.Errorf("Expected post title to be loaded, got %+v", result.Topics[0].Posts[0])
+			}
+		},
+	)
+
+	t.Run(
+		"TestPreloadNestedMixedDirections", func(t *testing.T) {
+			t.Cleanup(cleanDB)
+			person, topics := seedPreloadData(t, db)
+			bob := testPerson{Name: "bob"}
+			if err := driver.Create(db, &bob); err != nil {
+				t.Fatal(err)
+			}
+			addEdge(t, db, person.ID, "best_friend", bob.ID)
+
+			// topic -[subscribed,in]-> person -[best_friend,out]-> person
+			result, err := driver.Model[testTopicWithSubscribers](db).
+				Where("title", comparator.EQ, topics[0].Title).
+				Preload("Subscribers.BestFriend").
+				Take()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(result.Subscribers) != 1 {
+				t.Fatalf("Expected 1 subscriber, got %d", len(result.Subscribers))
+			}
+			subscriber := result.Subscribers[0]
+			if subscriber.Name != person.Name {
+				t.Errorf("Expected subscriber %s, got %s", person.Name, subscriber.Name)
+			}
+			if subscriber.BestFriend == nil || subscriber.BestFriend.Name != "bob" {
+				t.Errorf("Expected nested best friend bob, got %+v", subscriber.BestFriend)
+			}
+		},
+	)
+
+	t.Run(
+		"TestPreloadNestedSelfReferential", func(t *testing.T) {
+			t.Cleanup(cleanDB)
+			person, topics := seedPreloadData(t, db)
+
+			// topic -[subscribed,in]-> person -[subscribed,out]-> topics
+			result, err := driver.Model[testTopicWithSubscribers](db).
+				Where("title", comparator.EQ, topics[0].Title).
+				Preload("Subscribers.Topics").
+				Take()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(result.Subscribers) != 1 {
+				t.Fatalf("Expected 1 subscriber, got %d", len(result.Subscribers))
+			}
+			if result.Subscribers[0].Name != person.Name {
+				t.Errorf("Expected subscriber %s, got %s", person.Name, result.Subscribers[0].Name)
+			}
+			if len(result.Subscribers[0].Topics) != len(topics) {
+				t.Errorf(
+					"Expected subscriber to have %d topics, got %d",
+					len(topics),
+					len(result.Subscribers[0].Topics),
+				)
+			}
+		},
+	)
+
+	t.Run(
+		"TestPreloadNestedInvalidPathErrors", func(t *testing.T) {
+			t.Cleanup(cleanDB)
+			seedPreloadData(t, db)
+
+			_, err := driver.Model[testPersonNested](db).Preload("Topics.NotAField").Find()
+			if err == nil {
+				t.Error("Expected error for unknown nested preload field")
+			}
+			_, err = driver.Model[testPersonNested](db).Preload("Topics.").Find()
+			if err == nil {
+				t.Error("Expected error for malformed preload path")
+			}
+			// testPerson's Topics element type has no nested edge fields
+			_, err = driver.Model[testPerson](db).Preload("Topics.Title").Find()
+			if err == nil {
+				t.Error("Expected error for nested preload on field without gremlinEdge tag")
 			}
 		},
 	)

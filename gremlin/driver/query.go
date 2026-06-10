@@ -42,6 +42,7 @@ type Query[T any] struct {
 	limit          *int
 	offset         *int
 	orderBy        *OrderCondition
+	preloads       map[string]*preloadNode
 	preTraversal   *gremlingo.GraphTraversal
 	rangeCondition *RangeCondition
 	selectedFields []any
@@ -697,14 +698,29 @@ func ToMapTraversal(
 	args ...any,
 ) *gremlingo.GraphTraversal {
 	if len(subtraversals) == 0 {
-		return query.ValueMap(args...).By(
-			anonymousTraversal.Choose(
-				anonymousTraversal.Count(Scope.Local).Is(P.Eq(1)),
-				anonymousTraversal.Unfold(),
-				anonymousTraversal.Identity(),
-			),
-		)
+		return query.ValueMap(args...).By(unfoldSingleValueTraversal())
 	}
+	return query.Local(mergedValueMapTraversal(subtraversals, args...))
+}
+
+// unfoldSingleValueTraversal is the ValueMap by-modulator that unfolds
+// single-cardinality property lists into plain values.
+func unfoldSingleValueTraversal() *gremlingo.GraphTraversal {
+	return anonymousTraversal.Choose(
+		anonymousTraversal.Count(Scope.Local).Is(P.Eq(1)),
+		anonymousTraversal.Unfold(),
+		anonymousTraversal.Identity(),
+	)
+}
+
+// mergedValueMapTraversal builds an anonymous traversal that merges a vertex's
+// value map with projected subtraversal results into a single flat map keyed
+// by property names and subtraversal aliases. It is used for the root query
+// and recursively for nested preloads.
+func mergedValueMapTraversal(
+	subtraversals map[string]*gremlingo.GraphTraversal,
+	args ...any,
+) *gremlingo.GraphTraversal {
 	subtraversalsKeys := make([]any, 0, len(subtraversals))
 	for key := range subtraversals {
 		subtraversalsKeys = append(subtraversalsKeys, key)
@@ -714,17 +730,8 @@ func ToMapTraversal(
 		keyString := key.(string) //nolint:errcheck //we already know this is a string
 		projectQuery = projectQuery.By(subtraversals[keyString])
 	}
-	query = query.Local(
-		anonymousTraversal.Union(
-			anonymousTraversal.ValueMap(args...).By(
-				anonymousTraversal.Choose(
-					anonymousTraversal.Count(Scope.Local).Is(P.Eq(1)),
-					anonymousTraversal.Unfold(),
-					anonymousTraversal.Identity(),
-				),
-			),
-			projectQuery,
-		).Unfold().Group().By(gremlingo.Column.Keys).By(anonymousTraversal.Select(gremlingo.Column.Values)),
-	)
-	return query
+	return anonymousTraversal.Union(
+		anonymousTraversal.ValueMap(args...).By(unfoldSingleValueTraversal()),
+		projectQuery,
+	).Unfold().Group().By(gremlingo.Column.Keys).By(anonymousTraversal.Select(gremlingo.Column.Values))
 }

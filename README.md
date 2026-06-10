@@ -629,9 +629,15 @@ func (q *Query[T]) Preload(fieldNames ...string) *Query[T]
 **Examples:**
 
 ```go
+type Post struct {
+    gsmtypes.Vertex
+    Title string `gremlin:"title"`
+}
+
 type Topic struct {
     gsmtypes.Vertex
     Title string `gremlin:"title"`
+    Posts []Post `gremlinEdge:"contains"`                // topic -[contains]-> post
 }
 
 type Person struct {
@@ -655,6 +661,14 @@ person, err := GSM.Model[Person](db).
     Preload("Topics", "BestFriend").
     Take()
 
+// Nested preloads with dot separated paths; intermediate levels
+// ("Topics" here) are preloaded implicitly
+person, err := GSM.Model[Person](db).
+    Where("name", comparator.EQ, "alice").
+    Preload("Topics.Posts").
+    Take()
+fmt.Println(person.Topics[0].Posts[0].Title)
+
 // Load a topic with everyone subscribed to it (incoming edges)
 type TopicWithSubscribers struct {
     gsmtypes.Vertex
@@ -671,16 +685,18 @@ topic, err := GSM.Model[TopicWithSubscribers](db).
 ```
 
 **How it works:**
-- `Preload()` takes the **Go field name** (e.g. `"Topics"`), not a gremlin property name
-- The field must be tagged with `gremlinEdge:"edge_label[,direction]"` and be a struct, pointer to struct, or slice of (pointers to) structs where the related type is a GSM vertex struct
+- `Preload()` takes **Go field names** (e.g. `"Topics"`), not gremlin property names; nested relationships use dot separated paths (e.g. `"Topics.Posts"`)
+- Each field in the path must be tagged with `gremlinEdge:"edge_label[,direction]"` and be a struct, pointer to struct, or slice of (pointers to) structs where the related type is a GSM vertex struct
 - GSM builds the edge traversal automatically, filters related vertices by the related struct's label, and maps each result into the related struct (including its `gremlin` tagged fields and vertex metadata)
+- Nested paths can mix directions and reference self-referential types (e.g. `"Subscribers.BestFriend"`); separate `Preload` calls for overlapping paths merge into one traversal
 - For non-slice fields, the first related vertex is loaded; pointer fields stay `nil` when no edge exists
 - Works with `Find()`, `Take()`, and `ID()`
 
 **Important notes:**
 - `gremlinEdge` fields are never persisted as vertex properties by `Create`/`Save` — they only describe the relationship for loading
-- Preloading an unknown field or a field without a `gremlinEdge` tag returns an error from the query execution method
-- Preloads are one level deep: relationships declared on the related struct are not loaded recursively
+- Preloading an unknown field or a field without a `gremlinEdge` tag (at any level of a nested path) returns an error from the query execution method
+- Only relationships named in preload paths are loaded; relationships declared on related structs are not loaded implicitly
+- Each nested level fans out the traversal and duplicates shared vertices per parent, so keep paths reasonably shallow on dense graphs
 - Edges themselves must already exist; create them with a raw traversal, e.g. `db.G().V(personID).AddE("subscribed").To(gremlingo.T__.V(topicID)).Iterate()`
 
 ### Labels

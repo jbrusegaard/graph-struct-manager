@@ -3,10 +3,22 @@ package driver
 import (
 	"fmt"
 	"reflect"
+	"slices"
+	"strings"
 
 	gremlingo "github.com/apache/tinkerpop/gremlin-go/v3/driver"
 	"github.com/jbrusegaard/graph-struct-manager/gsmtypes"
 )
+
+// preloadNode is a node in the tree of preload paths. Each key in children is
+// a Go struct field name on the related type of the parent node.
+type preloadNode struct {
+	children map[string]*preloadNode
+}
+
+func newPreloadNode() *preloadNode {
+	return &preloadNode{children: make(map[string]*preloadNode)}
+}
 
 // Preload eagerly loads related GSM vertex structs over edges declared with
 // the gremlinEdge struct tag. The tag declares the edge label and optionally
@@ -15,6 +27,7 @@ import (
 //	type Topic struct {
 //		gsmtypes.Vertex
 //		Title string `gremlin:"title"`
+//		Posts []Post `gremlinEdge:"contains"`
 //	}
 //
 //	type Person struct {
@@ -25,34 +38,69 @@ import (
 //
 //	people, err := driver.Model[Person](db).Preload("Topics").Find()
 //
-// Preload takes Go struct field names. Supported field types are a struct,
-// pointer to struct, or slice of (pointers to) structs, where the related
-// struct is a GSM vertex struct. For non-slice fields the first related
-// vertex is loaded. Invalid preloads surface as errors from Find/Take/ID.
-func (q *Query[T]) Preload(fieldNames ...string) *Query[T] {
+// Preload takes Go struct field names. Nested relationships are loaded with
+// dot separated paths; intermediate levels are preloaded implicitly:
+//
+//	people, err := driver.Model[Person](db).Preload("Topics.Posts").Find()
+//
+// Supported field types are a struct, pointer to struct, or slice of
+// (pointers to) structs, where the related struct is a GSM vertex struct.
+// For non-slice fields the first related vertex is loaded. Invalid preloads
+// surface as errors from Find/Take/ID.
+func (q *Query[T]) Preload(fieldPaths ...string) *Query[T] {
 	modelType := reflect.TypeFor[T]()
 	if modelType.Kind() == reflect.Pointer {
 		modelType = modelType.Elem()
 	}
-	for _, fieldName := range fieldNames {
-		traversal, err := buildPreloadTraversal(modelType, fieldName)
+	for _, fieldPath := range fieldPaths {
+		rootField, err := q.mergePreloadPath(fieldPath)
+		if err != nil {
+			q.err = err
+			return q
+		}
+		traversal, err := buildPreloadTraversal(modelType, rootField, q.preloads[rootField])
 		if err != nil {
 			q.err = err
 			return q
 		}
 		q.writeDebugString(".Preload(")
-		q.writeDebugString(fieldName)
+		q.writeDebugString(fieldPath)
 		q.writeDebugString(")")
-		q.subTraversals[fieldName] = traversal
+		q.subTraversals[rootField] = traversal
 	}
 	return q
 }
 
+// mergePreloadPath merges a dot separated preload path into the query's
+// preload tree and returns the root field name.
+func (q *Query[T]) mergePreloadPath(fieldPath string) (string, error) {
+	parts := strings.Split(fieldPath, ".")
+	if slices.Contains(parts, "") {
+		return "", fmt.Errorf("preload: invalid path %q", fieldPath)
+	}
+	if q.preloads == nil {
+		q.preloads = make(map[string]*preloadNode)
+	}
+	children := q.preloads
+	for _, part := range parts {
+		node, ok := children[part]
+		if !ok {
+			node = newPreloadNode()
+			children[part] = node
+		}
+		children = node.children
+	}
+	return parts[0], nil
+}
+
 // buildPreloadTraversal builds the subtraversal that fetches the related
 // vertices for a gremlinEdge tagged field as a folded list of value maps.
+// When node has children, each related vertex's value map is merged with the
+// nested preload projections so relationships load recursively.
 func buildPreloadTraversal(
 	modelType reflect.Type,
 	fieldName string,
+	node *preloadNode,
 ) (*gremlingo.GraphTraversal, error) {
 	if modelType.Kind() != reflect.Struct {
 		return nil, fmt.Errorf("preload: type %s is not a struct", modelType.Name())
@@ -105,14 +153,19 @@ func buildPreloadTraversal(
 		valueMapArgs = append(valueMapArgs, collectGremlinTagFields(relatedType)...)
 	}
 
-	traversal = traversal.ValueMap(valueMapArgs...).By(
-		anonymousTraversal.Choose(
-			anonymousTraversal.Count(Scope.Local).Is(P.Eq(1)),
-			anonymousTraversal.Unfold(),
-			anonymousTraversal.Identity(),
-		),
-	).Fold()
-	return traversal, nil
+	if node == nil || len(node.children) == 0 {
+		return traversal.ValueMap(valueMapArgs...).By(unfoldSingleValueTraversal()).Fold(), nil
+	}
+
+	childTraversals := make(map[string]*gremlingo.GraphTraversal, len(node.children))
+	for childName, childNode := range node.children {
+		childTraversal, childErr := buildPreloadTraversal(relatedType, childName, childNode)
+		if childErr != nil {
+			return nil, fmt.Errorf("preload: %s: %w", fieldName, childErr)
+		}
+		childTraversals[childName] = childTraversal
+	}
+	return traversal.Local(mergedValueMapTraversal(childTraversals, valueMapArgs...)).Fold(), nil
 }
 
 // edgeFieldStructType resolves the underlying struct type of a gremlinEdge
