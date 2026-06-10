@@ -11,6 +11,7 @@ A type-safe, chainable query builder for Gremlin graph databases in Go. This ORM
   - [Database Driver Types](#database-driver-types)
   - [Custom ID Generator](#custom-id-generator)
 - [Hooks](#hooks)
+- [Transactions](#transactions)
 - [Environment Variables](#environment-variables)
 - [Query Builder Functions](#query-builder-functions)
   - [NewQuery](#newquery)
@@ -243,6 +244,59 @@ func (u *User) AfterUpdate(db *driver.GremlinDriver) error {
     return nil
 }
 ```
+
+## Transactions
+
+Run multiple operations atomically with `Transaction`. The callback receives a
+`*GremlinDriver` bound to the transaction, so all generic functions
+(`Create`, `Save`, `Model[T]`, `Where[T]`, etc.) work inside it unchanged.
+If the callback returns an error (or panics), the transaction is rolled back;
+otherwise it is committed automatically.
+
+```go
+err := db.Transaction(func(tx *driver.GremlinDriver) error {
+    user := User{Name: "alice"}
+    if err := driver.Create(tx, &user); err != nil {
+        return err // rolls back
+    }
+
+    account := Account{Owner: user.Name, Balance: 100}
+    if err := driver.Create(tx, &account); err != nil {
+        return err // rolls back, user is not persisted either
+    }
+
+    return nil // commits
+})
+```
+
+For manual control, use `Begin`/`Commit`/`Rollback`:
+
+```go
+tx, err := db.Begin()
+if err != nil {
+    return err
+}
+
+if err := driver.Create(tx, &user); err != nil {
+    _ = tx.Rollback()
+    return err
+}
+
+if err := tx.Commit(); err != nil {
+    return err
+}
+```
+
+**Notes:**
+- Nested transactions are not supported; calling `Begin` (or `Transaction`) on a
+  transaction-bound driver returns `ErrNestedTransaction`.
+- `Commit`/`Rollback` on a non-transaction driver return `ErrNotInTransaction`.
+- `InTransaction()` reports whether a driver is bound to a transaction.
+- Transaction support depends on the backing graph database. Plain TinkerGraph
+  does not support transactions — use a transaction-capable graph such as
+  `TinkerTransactionGraph` (TinkerPop 3.7+), JanusGraph, or Neptune. The
+  bundled `docker-compose.yml` dev server is configured with
+  `TinkerTransactionGraph`.
 
 Import the necessary packages and connect to your Gremlin database:
 

@@ -24,6 +24,8 @@ type GremlinDriver struct {
 	logger      *log.Logger
 	dbDriver    DatabaseDriver
 	idGenerator func() any
+	// tx is non-nil when this driver is bound to an open transaction
+	tx *gremlingo.Transaction
 }
 
 type QueryOpts struct {
@@ -87,6 +89,14 @@ func Open(url string, config ...Config) (*GremlinDriver, error) {
 }
 
 func (driver *GremlinDriver) Close() {
+	if driver.tx != nil {
+		// A transaction-bound driver owns only its session, not the shared
+		// remote connection. Closing the transaction rolls back if still open.
+		if err := driver.tx.Close(); err != nil {
+			driver.logger.Errorf("failed to close transaction: %v", err)
+		}
+		return
+	}
 	driver.remoteConn.Close()
 }
 

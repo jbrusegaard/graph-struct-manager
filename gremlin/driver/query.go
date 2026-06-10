@@ -402,7 +402,7 @@ func collectGremlinTagFields(rt reflect.Type) []any { //nolint:gocognit
 	if rt == nil {
 		return nil
 	}
-	if rt.Kind() == reflect.Ptr {
+	if rt.Kind() == reflect.Pointer {
 		rt = rt.Elem()
 	}
 	if rt.Kind() != reflect.Struct {
@@ -415,7 +415,7 @@ func collectGremlinTagFields(rt reflect.Type) []any { //nolint:gocognit
 
 		if field.Anonymous {
 			anonymousType := field.Type
-			if anonymousType.Kind() == reflect.Ptr {
+			if anonymousType.Kind() == reflect.Pointer {
 				anonymousType = anonymousType.Elem()
 			}
 			if anonymousType.Kind() == reflect.Struct {
