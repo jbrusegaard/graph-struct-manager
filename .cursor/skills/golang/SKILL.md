@@ -29,6 +29,8 @@ Gremlin traversals.
   zero values and nil pointers during create/update.
 - Use `gremlinSubTraversal:"alias"` for subtraversal projections; the alias must match
   `AddSubTraversal` usage.
+- Use `gremlinEdge:"edge_label[,out|in|both]"` for related-vertex fields loaded via
+  `Preload(goFieldName)`; these fields are never persisted as properties.
 - Label resolution: `Label() string` wins; empty label defaults to snake_case struct name.
 
 ## Query Builder Design

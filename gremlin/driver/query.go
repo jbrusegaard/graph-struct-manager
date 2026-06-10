@@ -36,6 +36,7 @@ type Query[T any] struct {
 	debug          bool
 	debugString    *strings.Builder
 	dedup          bool
+	err            error
 	ids            []any
 	labels         []any
 	limit          *int
@@ -322,6 +323,9 @@ func (q *Query[T]) OrderBy(field string, order GremlinOrder) *Query[T] {
 
 // Find executes the query and returns all matching results
 func (q *Query[T]) Find() ([]T, error) {
+	if q.err != nil {
+		return nil, q.err
+	}
 	q.writeDebugString(".ToList()")
 	query := q.buildBaseQuery()
 	if len(q.selectedFields) > 0 {
@@ -352,8 +356,11 @@ func (q *Query[T]) Find() ([]T, error) {
 
 // Take executes the query and returns the first result
 func (q *Query[T]) Take() (T, error) {
-	q.writeDebugString(".Next()")
 	var v T
+	if q.err != nil {
+		return v, q.err
+	}
+	q.writeDebugString(".Next()")
 	query := q.buildBaseQuery()
 	if len(q.selectedFields) > 0 {
 		query = ToMapTraversal(query, q.subTraversals, q.selectedFields...)
@@ -428,7 +435,8 @@ func collectGremlinTagFields(rt reflect.Type) []any { //nolint:gocognit
 			continue
 		}
 
-		if field.Tag.Get(gsmtypes.GremlinSubTraversalTag) != "" {
+		if field.Tag.Get(gsmtypes.GremlinSubTraversalTag) != "" ||
+			field.Tag.Get(gsmtypes.GremlinEdgeTag) != "" {
 			continue
 		}
 
@@ -459,6 +467,9 @@ func (q *Query[T]) Delete() error {
 // ID finds vertex by id in a more optimized way than using where
 func (q *Query[T]) ID(id any) (T, error) {
 	var v T
+	if q.err != nil {
+		return v, q.err
+	}
 	query := q.db.g.V(id)
 	if len(q.labels) > 0 {
 		query = query.HasLabel(q.labels...)

@@ -18,6 +18,20 @@ func ParseGremlinTagForTest(tag string) GremlinTagOptionsForTest {
 	}
 }
 
+// GremlinEdgeTagOptionsForTest mirrors gremlinEdgeTagOptions for external tests.
+type GremlinEdgeTagOptionsForTest struct {
+	Label     string
+	Direction int
+}
+
+func ParseGremlinEdgeTagForTest(tag string) (GremlinEdgeTagOptionsForTest, error) {
+	opts, err := parseGremlinEdgeTag(tag)
+	return GremlinEdgeTagOptionsForTest{
+		Label:     opts.label,
+		Direction: int(opts.direction),
+	}, err
+}
+
 func GetStructNameForTest[T any]() (string, error) {
 	return getStructName[T]()
 }

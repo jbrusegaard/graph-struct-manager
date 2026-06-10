@@ -18,6 +18,7 @@ A type-safe, chainable query builder for Gremlin graph databases in Go. This ORM
   - [Where](#where)
   - [WhereTraversal](#wheretraversal)
   - [AddSubTraversal](#addsubtraversal)
+  - [Preload](#preload)
 - [Labels](#labels)
 - [Select](#select)
   - [Dedup](#dedup)
@@ -607,6 +608,80 @@ user, err := GSM.Model[UserWithStats](db).
 - The result type from the subtraversal must be compatible with the struct field type
 - You can add multiple subtraversals to populate different fields in a single query
 - Subtraversals work with `Find()`, `First()`, and other query execution methods
+
+### Preload
+
+Eagerly loads related GSM vertex structs over edges, similar to GORM associations. Declare the relationship on your struct with the `gremlinEdge` tag and load it with `Preload()` — no manual traversals required.
+
+**Signature:**
+```go
+func (q *Query[T]) Preload(fieldNames ...string) *Query[T]
+```
+
+**The `gremlinEdge` tag:**
+```go
+`gremlinEdge:"edge_label"`           // follows outgoing edges (default)
+`gremlinEdge:"edge_label,out"`      // follows outgoing edges
+`gremlinEdge:"edge_label,in"`       // follows incoming edges
+`gremlinEdge:"edge_label,both"`     // follows edges in both directions
+```
+
+**Examples:**
+
+```go
+type Topic struct {
+    gsmtypes.Vertex
+    Title string `gremlin:"title"`
+}
+
+type Person struct {
+    gsmtypes.Vertex
+    Name       string  `gremlin:"name"`
+    Topics     []Topic `gremlinEdge:"subscribed"`        // person -[subscribed]-> topic
+    BestFriend *Person `gremlinEdge:"best_friend,out"`   // single related vertex
+}
+
+// Load people with their subscribed topics
+people, err := GSM.Model[Person](db).Preload("Topics").Find()
+for _, person := range people {
+    for _, topic := range person.Topics {
+        fmt.Println(person.Name, "is subscribed to", topic.Title)
+    }
+}
+
+// Preload multiple relationships at once
+person, err := GSM.Model[Person](db).
+    Where("name", comparator.EQ, "alice").
+    Preload("Topics", "BestFriend").
+    Take()
+
+// Load a topic with everyone subscribed to it (incoming edges)
+type TopicWithSubscribers struct {
+    gsmtypes.Vertex
+    Title       string   `gremlin:"title"`
+    Subscribers []Person `gremlinEdge:"subscribed,in"`
+}
+
+func (t *TopicWithSubscribers) Label() string { return "topic" }
+
+topic, err := GSM.Model[TopicWithSubscribers](db).
+    Where("title", comparator.EQ, "graphs").
+    Preload("Subscribers").
+    Take()
+```
+
+**How it works:**
+- `Preload()` takes the **Go field name** (e.g. `"Topics"`), not a gremlin property name
+- The field must be tagged with `gremlinEdge:"edge_label[,direction]"` and be a struct, pointer to struct, or slice of (pointers to) structs where the related type is a GSM vertex struct
+- GSM builds the edge traversal automatically, filters related vertices by the related struct's label, and maps each result into the related struct (including its `gremlin` tagged fields and vertex metadata)
+- For non-slice fields, the first related vertex is loaded; pointer fields stay `nil` when no edge exists
+- Works with `Find()`, `Take()`, and `ID()`
+
+**Important notes:**
+- `gremlinEdge` fields are never persisted as vertex properties by `Create`/`Save` — they only describe the relationship for loading
+- Preloading an unknown field or a field without a `gremlinEdge` tag returns an error from the query execution method
+- Preloads are one level deep: relationships declared on the related struct are not loaded recursively
+- Edges themselves must already exist; create them with a raw traversal, e.g. `db.G().V(personID).AddE("subscribed").To(gremlingo.T__.V(topicID)).Iterate()`
 
 ### Labels
 

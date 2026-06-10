@@ -52,6 +52,12 @@ func UnloadGremlinResultIntoStruct(
 	if !ok {
 		return errors.New("result is not a map")
 	}
+	return unloadGremlinMapIntoStruct(v, mapResult)
+}
+
+// unloadGremlinMapIntoStruct unloads a gremlin result map into a struct.
+// v must be a non-nil pointer to a struct with gremlin tags on the fields.
+func unloadGremlinMapIntoStruct(v any, mapResult map[any]any) error {
 	// make string map
 	stringMap := make(map[string]any, len(mapResult))
 	for key, value := range mapResult {
@@ -78,7 +84,7 @@ func UnloadGremlinResultIntoStruct(
 	if collectUnmapped {
 		extras := make(map[string]any, len(stringMap))
 		for key, value := range stringMap {
-			if _, ok = usedKeys[key]; ok {
+			if _, ok := usedKeys[key]; ok {
 				continue
 			}
 			extras[key] = value
@@ -145,6 +151,17 @@ func unloadFieldFromResult(
 	gremlinTag := fieldType.Tag.Get(gsmtypes.GremlinTag)
 	gremlinSubTraversalTag := fieldType.Tag.Get(gsmtypes.GremlinSubTraversalTag)
 	if !field.CanInterface() || !field.CanSet() {
+		return
+	}
+
+	// gremlinEdge fields are loaded via Preload and keyed by the Go field name.
+	if fieldType.Tag.Get(gsmtypes.GremlinEdgeTag) != "" {
+		value, ok := stringMap[fieldType.Name]
+		if !ok {
+			return
+		}
+		usedKeys[fieldType.Name] = struct{}{}
+		setEdgeFieldFromValue(field, value)
 		return
 	}
 
@@ -217,6 +234,62 @@ func setFieldFromValue(field reflect.Value, value any) {
 		)
 		field.Set(slice)
 	}
+}
+
+// setEdgeFieldFromValue assigns preloaded related vertices into a gremlinEdge
+// tagged field. The gremlin value is a folded list of vertex value maps. For
+// slice fields all related vertices are loaded, otherwise the first one is.
+func setEdgeFieldFromValue(field reflect.Value, value any) {
+	relatedMaps, ok := value.([]any)
+	if !ok {
+		return
+	}
+	fieldType := field.Type()
+	switch fieldType.Kind() { //nolint:exhaustive // only struct-like edge field types are supported
+	case reflect.Slice:
+		slice := reflect.MakeSlice(fieldType, 0, len(relatedMaps))
+		for _, relatedMap := range relatedMaps {
+			related, relatedOk := newStructFromGremlinMap(fieldType.Elem(), relatedMap)
+			if !relatedOk {
+				continue
+			}
+			slice = reflect.Append(slice, related)
+		}
+		field.Set(slice)
+	case reflect.Pointer, reflect.Struct:
+		if len(relatedMaps) == 0 {
+			return
+		}
+		related, relatedOk := newStructFromGremlinMap(fieldType, relatedMaps[0])
+		if relatedOk {
+			field.Set(related)
+		}
+	}
+}
+
+// newStructFromGremlinMap builds a value of elemType (a struct or pointer to
+// struct) from a gremlin value map result.
+func newStructFromGremlinMap(elemType reflect.Type, value any) (reflect.Value, bool) {
+	mapValue, ok := value.(map[any]any)
+	if !ok {
+		return reflect.Value{}, false
+	}
+	isPointer := elemType.Kind() == reflect.Pointer
+	structType := elemType
+	if isPointer {
+		structType = elemType.Elem()
+	}
+	if structType.Kind() != reflect.Struct {
+		return reflect.Value{}, false
+	}
+	structPointer := reflect.New(structType)
+	if err := unloadGremlinMapIntoStruct(structPointer.Interface(), mapValue); err != nil {
+		return reflect.Value{}, false
+	}
+	if isPointer {
+		return structPointer, true
+	}
+	return structPointer.Elem(), true
 }
 
 func getLabelFromVertex(value any) string {
@@ -309,8 +382,9 @@ func structToMap( //nolint:gocognit
 			continue
 		}
 
-		// Skip sub traversal tags so this doesnt get included when creating vertices
-		if field.Tag.Get(gsmtypes.GremlinSubTraversalTag) != "" {
+		// Skip sub traversal and edge tags so these dont get included when creating vertices
+		if field.Tag.Get(gsmtypes.GremlinSubTraversalTag) != "" ||
+			field.Tag.Get(gsmtypes.GremlinEdgeTag) != "" {
 			continue
 		}
 
