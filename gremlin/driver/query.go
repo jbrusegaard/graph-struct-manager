@@ -129,14 +129,7 @@ func NewQuery[T any](db *GremlinDriver) *Query[T] {
 		queryAsString.WriteString(")")
 	}
 	ids := make([]any, 0)
-	modelType := reflect.TypeFor[T]()
-	var fields []any
-	if !typeImplementsUnmappedProperties(modelType) {
-		fields = collectGremlinTagFields(modelType)
-		if len(fields) > 0 {
-			fields = slices.Insert(fields, 0, true)
-		}
-	}
+	fields := schemaFor(reflect.TypeFor[T]()).selectedFields
 	labels := []any{label}
 	return &Query[T]{
 		conditions:     make([]*QueryCondition, 0),
@@ -406,57 +399,6 @@ func (q *Query[T]) Count() (int, error) {
 	return num, nil
 }
 
-func collectGremlinTagFields(rt reflect.Type) []any { //nolint:gocognit
-	if rt == nil {
-		return nil
-	}
-	if rt.Kind() == reflect.Pointer {
-		rt = rt.Elem()
-	}
-	if rt.Kind() != reflect.Struct {
-		return nil
-	}
-
-	fields := make([]any, 0)
-	for i := range rt.NumField() {
-		field := rt.Field(i)
-
-		if field.Anonymous {
-			anonymousType := field.Type
-			if anonymousType.Kind() == reflect.Pointer {
-				anonymousType = anonymousType.Elem()
-			}
-			if anonymousType.Kind() == reflect.Struct {
-				fields = append(fields, collectGremlinTagFields(anonymousType)...)
-				continue
-			}
-		}
-
-		if field.PkgPath != "" {
-			continue
-		}
-
-		if field.Tag.Get(gsmtypes.GremlinSubTraversalTag) != "" ||
-			field.Tag.Get(gsmtypes.GremlinEdgeTag) != "" {
-			continue
-		}
-
-		gremlinTag := field.Tag.Get(gsmtypes.GremlinTag)
-		if gremlinTag == "" || gremlinTag == "-" {
-			continue
-		}
-
-		tagParts := parseGremlinTag(gremlinTag)
-		if tagParts.unmapped || tagParts.name == "" || tagParts.name == "-" {
-			continue
-		}
-
-		fields = append(fields, tagParts.name)
-	}
-
-	return fields
-}
-
 // Delete deletes all matching results
 func (q *Query[T]) Delete() error {
 	q.writeDebugString(".Drop().Iterate()")
@@ -496,19 +438,75 @@ func (q *Query[T]) ID(id any) (T, error) {
 // NOTE: Slices will be updated as Cardinality.Set
 // NOTE: Maps will be updated as Cardinality.Set with keys as the value of the property
 func (q *Query[T]) Update(propertyName string, value any) error {
-	// figure out if propertyName is in the struct
-	_, fieldType, err := getStructFieldNameAndType[T](propertyName)
-	if err != nil {
-		return fmt.Errorf("propertyName not found in gremlin struct tags: %s", propertyName)
+	return q.Updates(map[string]any{propertyName: value})
+}
+
+// Updates performs a targeted update of multiple properties on all matching
+// vertices in a single traversal. Only the supplied properties are written;
+// every other property on the vertex is left untouched. Map keys must match
+// the gremlin struct tags on T.
+// NOTE: Slices will be updated as Cardinality.Set
+// NOTE: last_modified is always refreshed as part of the update
+func (q *Query[T]) Updates(properties map[string]any) error {
+	if q.err != nil {
+		return q.err
 	}
+	if len(properties) == 0 {
+		return nil
+	}
+	rt := reflect.TypeFor[T]()
+	if rt.Kind() == reflect.Pointer {
+		rt = rt.Elem()
+	}
+	schema := schemaFor(rt)
+
+	// Sort keys so the generated traversal and debug output are deterministic.
+	keys := make([]string, 0, len(properties))
+	for key := range properties {
+		keys = append(keys, key)
+	}
+	slices.Sort(keys)
+
+	// Validate every property before touching the database so a bad key
+	// can't leave a partial update behind.
+	fieldTypes := make(map[string]reflect.Type, len(properties))
+	for _, key := range keys {
+		if key == "id" {
+			return errors.New("cannot update vertex id")
+		}
+		field, ok := schema.mapFieldByTag(key)
+		if !ok {
+			return fmt.Errorf("propertyName not found in gremlin struct tags: %s", key)
+		}
+		fieldTypes[key] = rt.FieldByIndex(field.index).Type
+	}
+
 	query := q.BuildQuery()
 	query.Property(cardinality.Single, gsmtypes.LastModified, time.Now().UTC())
+	for _, key := range keys {
+		query = q.applyPropertyUpdate(query, key, fieldTypes[key], properties[key])
+	}
+	errChan := query.Iterate()
+	return <-errChan
+}
+
+// applyPropertyUpdate appends the Property steps for a single property to the
+// traversal. Multi-valued (slice) properties are dropped first so stale
+// elements don't survive the update.
+func (q *Query[T]) applyPropertyUpdate(
+	query *gremlingo.GraphTraversal,
+	propertyName string,
+	fieldType reflect.Type,
+	value any,
+) *gremlingo.GraphTraversal {
 	switch fieldType.Kind() { //nolint: exhaustive // We are only handling slices and maps otherwise regular cardinality
 	case reflect.Slice:
-		err = q.resetProperty(query, propertyName)
-		if err != nil {
-			return err
-		}
+		// Drop the existing property in the same traversal so stale slice
+		// elements don't survive the update.
+		q.writeDebugString(".SideEffect(Properties(")
+		q.writeDebugString(propertyName)
+		q.writeDebugString(").Drop())")
+		query = query.SideEffect(anonymousTraversal.Properties(propertyName).Drop())
 		cardinality := gremlingo.Cardinality.List
 		cardinalityString := "Cardinality.List"
 		if q.db.dbDriver == Neptune {
@@ -538,14 +536,7 @@ func (q *Query[T]) Update(propertyName string, value any) error {
 		q.writeDebugString(")")
 		query = query.Property(gremlingo.Cardinality.Single, propertyName, value)
 	}
-	errChan := query.Iterate()
-	return <-errChan
-}
-
-func (q *Query[T]) resetProperty(query *gremlingo.GraphTraversal, propertyName string) error {
-	query = query.Clone()
-	errChan := query.Properties(propertyName).Drop().Iterate()
-	return <-errChan
+	return query
 }
 
 // writeDebugString writes a string to the debug string if GSM_DEBUG is set to true

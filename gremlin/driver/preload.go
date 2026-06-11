@@ -143,14 +143,14 @@ func buildPreloadTraversal(
 		traversal = anonymousTraversal.Out(tagOpts.label)
 	}
 
-	relatedLabel := getLabelFromVertex(reflect.New(relatedType).Elem().Interface())
-	if relatedLabel != "" {
-		traversal = traversal.HasLabel(relatedLabel)
+	relatedSchema := schemaFor(relatedType)
+	if relatedSchema.zeroLabel != "" {
+		traversal = traversal.HasLabel(relatedSchema.zeroLabel)
 	}
 
-	valueMapArgs := []any{true}
-	if !typeImplementsUnmappedProperties(relatedType) {
-		valueMapArgs = append(valueMapArgs, collectGremlinTagFields(relatedType)...)
+	valueMapArgs := relatedSchema.selectedFields
+	if valueMapArgs == nil {
+		valueMapArgs = []any{true}
 	}
 
 	if node == nil || len(node.children) == 0 {
