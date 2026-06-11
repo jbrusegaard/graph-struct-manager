@@ -1,5 +1,63 @@
 package driver
 
+import (
+	"errors"
+	"fmt"
+)
+
+// edgeDirection represents the direction of an edge traversal for a
+// gremlinEdge tagged field.
+type edgeDirection int
+
+const (
+	edgeDirectionOut edgeDirection = iota
+	edgeDirectionIn
+	edgeDirectionBoth
+)
+
+// gremlinEdgeTagOptions holds parsed gremlinEdge tag information
+type gremlinEdgeTagOptions struct {
+	label     string
+	direction edgeDirection
+}
+
+// parseGremlinEdgeTag parses a gremlinEdge tag and returns the edge label and direction.
+// The direction defaults to "out" when omitted.
+// Examples:
+//   - "subscribed" -> {label: "subscribed", direction: out}
+//   - "subscribed,in" -> {label: "subscribed", direction: in}
+//   - "subscribed,both" -> {label: "subscribed", direction: both}
+func parseGremlinEdgeTag(tag string) (gremlinEdgeTagOptions, error) {
+	parts := splitTag(tag)
+
+	if len(parts) == 0 || parts[0] == "" || parts[0] == "-" {
+		return gremlinEdgeTagOptions{}, errors.New("gremlinEdge tag must specify an edge label")
+	}
+
+	opts := gremlinEdgeTagOptions{
+		label:     parts[0],
+		direction: edgeDirectionOut,
+	}
+
+	for i := 1; i < len(parts); i++ {
+		switch parts[i] {
+		case "out":
+			opts.direction = edgeDirectionOut
+		case "in":
+			opts.direction = edgeDirectionIn
+		case "both":
+			opts.direction = edgeDirectionBoth
+		default:
+			return gremlinEdgeTagOptions{}, fmt.Errorf(
+				"gremlinEdge tag has unknown option %q (expected out, in, or both)",
+				parts[i],
+			)
+		}
+	}
+
+	return opts, nil
+}
+
 // gremlinTagOptions holds parsed gremlin tag information
 type gremlinTagOptions struct {
 	name      string

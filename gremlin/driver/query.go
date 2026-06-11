@@ -36,11 +36,13 @@ type Query[T any] struct {
 	debug          bool
 	debugString    *strings.Builder
 	dedup          bool
+	err            error
 	ids            []any
 	labels         []any
 	limit          *int
 	offset         *int
 	orderBy        *OrderCondition
+	preloads       map[string]*preloadNode
 	preTraversal   *gremlingo.GraphTraversal
 	rangeCondition *RangeCondition
 	selectedFields []any
@@ -322,6 +324,9 @@ func (q *Query[T]) OrderBy(field string, order GremlinOrder) *Query[T] {
 
 // Find executes the query and returns all matching results
 func (q *Query[T]) Find() ([]T, error) {
+	if q.err != nil {
+		return nil, q.err
+	}
 	q.writeDebugString(".ToList()")
 	query := q.buildBaseQuery()
 	if len(q.selectedFields) > 0 {
@@ -352,8 +357,11 @@ func (q *Query[T]) Find() ([]T, error) {
 
 // Take executes the query and returns the first result
 func (q *Query[T]) Take() (T, error) {
-	q.writeDebugString(".Next()")
 	var v T
+	if q.err != nil {
+		return v, q.err
+	}
+	q.writeDebugString(".Next()")
 	query := q.buildBaseQuery()
 	if len(q.selectedFields) > 0 {
 		query = ToMapTraversal(query, q.subTraversals, q.selectedFields...)
@@ -428,7 +436,8 @@ func collectGremlinTagFields(rt reflect.Type) []any { //nolint:gocognit
 			continue
 		}
 
-		if field.Tag.Get(gsmtypes.GremlinSubTraversalTag) != "" {
+		if field.Tag.Get(gsmtypes.GremlinSubTraversalTag) != "" ||
+			field.Tag.Get(gsmtypes.GremlinEdgeTag) != "" {
 			continue
 		}
 
@@ -459,6 +468,9 @@ func (q *Query[T]) Delete() error {
 // ID finds vertex by id in a more optimized way than using where
 func (q *Query[T]) ID(id any) (T, error) {
 	var v T
+	if q.err != nil {
+		return v, q.err
+	}
 	query := q.db.g.V(id)
 	if len(q.labels) > 0 {
 		query = query.HasLabel(q.labels...)
@@ -686,14 +698,29 @@ func ToMapTraversal(
 	args ...any,
 ) *gremlingo.GraphTraversal {
 	if len(subtraversals) == 0 {
-		return query.ValueMap(args...).By(
-			anonymousTraversal.Choose(
-				anonymousTraversal.Count(Scope.Local).Is(P.Eq(1)),
-				anonymousTraversal.Unfold(),
-				anonymousTraversal.Identity(),
-			),
-		)
+		return query.ValueMap(args...).By(unfoldSingleValueTraversal())
 	}
+	return query.Local(mergedValueMapTraversal(subtraversals, args...))
+}
+
+// unfoldSingleValueTraversal is the ValueMap by-modulator that unfolds
+// single-cardinality property lists into plain values.
+func unfoldSingleValueTraversal() *gremlingo.GraphTraversal {
+	return anonymousTraversal.Choose(
+		anonymousTraversal.Count(Scope.Local).Is(P.Eq(1)),
+		anonymousTraversal.Unfold(),
+		anonymousTraversal.Identity(),
+	)
+}
+
+// mergedValueMapTraversal builds an anonymous traversal that merges a vertex's
+// value map with projected subtraversal results into a single flat map keyed
+// by property names and subtraversal aliases. It is used for the root query
+// and recursively for nested preloads.
+func mergedValueMapTraversal(
+	subtraversals map[string]*gremlingo.GraphTraversal,
+	args ...any,
+) *gremlingo.GraphTraversal {
 	subtraversalsKeys := make([]any, 0, len(subtraversals))
 	for key := range subtraversals {
 		subtraversalsKeys = append(subtraversalsKeys, key)
@@ -703,17 +730,8 @@ func ToMapTraversal(
 		keyString := key.(string) //nolint:errcheck //we already know this is a string
 		projectQuery = projectQuery.By(subtraversals[keyString])
 	}
-	query = query.Local(
-		anonymousTraversal.Union(
-			anonymousTraversal.ValueMap(args...).By(
-				anonymousTraversal.Choose(
-					anonymousTraversal.Count(Scope.Local).Is(P.Eq(1)),
-					anonymousTraversal.Unfold(),
-					anonymousTraversal.Identity(),
-				),
-			),
-			projectQuery,
-		).Unfold().Group().By(gremlingo.Column.Keys).By(anonymousTraversal.Select(gremlingo.Column.Values)),
-	)
-	return query
+	return anonymousTraversal.Union(
+		anonymousTraversal.ValueMap(args...).By(unfoldSingleValueTraversal()),
+		projectQuery,
+	).Unfold().Group().By(gremlingo.Column.Keys).By(anonymousTraversal.Select(gremlingo.Column.Values))
 }
