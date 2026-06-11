@@ -446,10 +446,12 @@ func (q *Query[T]) Update(propertyName string, value any) error {
 	query.Property(cardinality.Single, gsmtypes.LastModified, time.Now().UTC())
 	switch fieldType.Kind() { //nolint: exhaustive // We are only handling slices and maps otherwise regular cardinality
 	case reflect.Slice:
-		err = q.resetProperty(query, propertyName)
-		if err != nil {
-			return err
-		}
+		// Drop the existing property in the same traversal so stale slice
+		// elements don't survive the update.
+		q.writeDebugString(".SideEffect(Properties(")
+		q.writeDebugString(propertyName)
+		q.writeDebugString(").Drop())")
+		query = query.SideEffect(anonymousTraversal.Properties(propertyName).Drop())
 		cardinality := gremlingo.Cardinality.List
 		cardinalityString := "Cardinality.List"
 		if q.db.dbDriver == Neptune {
@@ -480,12 +482,6 @@ func (q *Query[T]) Update(propertyName string, value any) error {
 		query = query.Property(gremlingo.Cardinality.Single, propertyName, value)
 	}
 	errChan := query.Iterate()
-	return <-errChan
-}
-
-func (q *Query[T]) resetProperty(query *gremlingo.GraphTraversal, propertyName string) error {
-	query = query.Clone()
-	errChan := query.Properties(propertyName).Drop().Iterate()
 	return <-errChan
 }
 

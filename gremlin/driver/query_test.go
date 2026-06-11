@@ -283,6 +283,9 @@ func TestQuery(t *testing.T) {
 					model.ListTest[1],
 				)
 			}
+			if len(model.ListTest) != 2 {
+				t.Errorf("Expected stale slice elements to be dropped, got %v", model.ListTest)
+			}
 		},
 	)
 	t.Run(
