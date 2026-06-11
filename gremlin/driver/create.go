@@ -46,12 +46,14 @@ func updateVertex[T any](db *GremlinDriver, value *T) error {
 	id := mapValue["id"]
 	delete(mapValue, "id")
 	label := getLabelFromVertex(value)
-	slicePropertyNames := getSlicePropertyNames(mapValue)
-	errChan := db.g.V(id).HasLabel(label).Properties(slicePropertyNames...).Drop().Iterate()
-	if propResetErr := <-errChan; propResetErr != nil {
-		return propResetErr
-	}
 	query := db.g.V(id).HasLabel(label)
+	if slicePropertyNames := getSlicePropertyNames(mapValue); len(slicePropertyNames) > 0 {
+		// Drop existing multi-valued properties in the same traversal so
+		// stale elements don't survive the update. This only targets slice
+		// properties: Properties() with no arguments would match (and drop)
+		// every property on the vertex.
+		query = query.SideEffect(anonymousTraversal.Properties(slicePropertyNames...).Drop())
+	}
 	query = handlePropertyUpdate(db, mapValue, query)
 	_, err = query.Next()
 	if err != nil {

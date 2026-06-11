@@ -798,3 +798,84 @@ func TestQuery(t *testing.T) {
 		},
 	)
 }
+
+func TestSaveReplacesSliceProperties(t *testing.T) {
+	t.Cleanup(cleanDB)
+	db, err := driver.Open(
+		DbURL, driver.Config{
+			Driver: dbDriver,
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	model := &testVertexForUtils{
+		Name:     "slice-replace",
+		Sort:     1,
+		ListTest: []string{"old1", "old2", "old3"},
+	}
+	if err := driver.Create(db, model); err != nil {
+		t.Fatal(err)
+	}
+
+	model.ListTest = []string{"new1"}
+	if err := driver.Save(db, model); err != nil {
+		t.Fatal(err)
+	}
+
+	updated, err := driver.Model[testVertexForUtils](db).ID(model.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(updated.ListTest) != 1 || updated.ListTest[0] != "new1" {
+		t.Errorf("Expected stale slice elements to be dropped, got %v", updated.ListTest)
+	}
+}
+
+func TestSaveKeepsUnrelatedProperties(t *testing.T) {
+	t.Cleanup(cleanDB)
+	db, err := driver.Open(
+		DbURL, driver.Config{
+			Driver: dbDriver,
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	// testVertex has no slice properties, so this update exercises the path
+	// that previously dropped every property on the vertex before rewriting.
+	model := &testVertex{Name: "keep-props"}
+	if err := driver.Create(db, model); err != nil {
+		t.Fatal(err)
+	}
+
+	// Set a property outside the struct mapping directly on the vertex.
+	if _, err := db.G().V(model.ID).Property("extra", "still-here").Next(); err != nil {
+		t.Fatal(err)
+	}
+
+	model.Name = "keep-props-updated"
+	if err := driver.Save(db, model); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := db.G().V(model.ID).Values("extra").Next()
+	if err != nil {
+		t.Fatalf("expected unrelated property to survive Save, got error: %v", err)
+	}
+	if got := result.GetString(); got != "still-here" {
+		t.Errorf("Expected unrelated property to be %q, got %q", "still-here", got)
+	}
+
+	updated, err := driver.Model[testVertex](db).ID(model.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Name != "keep-props-updated" {
+		t.Errorf("Expected name to be updated, got %q", updated.Name)
+	}
+}
