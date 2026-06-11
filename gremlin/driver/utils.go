@@ -3,11 +3,9 @@ package driver
 import (
 	"errors"
 	"fmt"
-	"maps"
 	"reflect"
 
 	gremlingo "github.com/apache/tinkerpop/gremlin-go/v3/driver"
-	"github.com/gobeam/stringy"
 	"github.com/jbrusegaard/graph-struct-manager/gsmtypes"
 )
 
@@ -77,10 +75,19 @@ func unloadGremlinMapIntoStruct(v any, mapResult map[any]any) error {
 		return errors.New("v must be a non-nil pointer")
 	}
 
-	usedKeys := make(map[string]struct{}, len(stringMap))
-	extrasFields := make([]reflect.Value, 0)
-	recursivelyUnloadIntoStruct(v, stringMap, usedKeys, &extrasFields)
+	elem := rv.Elem()
+	if elem.Kind() != reflect.Struct {
+		return errors.New("v must point to a struct")
+	}
+
 	unmappedCollector, collectUnmapped := v.(gsmtypes.UnmappedPropertiesType)
+	var usedKeys map[string]struct{}
+	if collectUnmapped {
+		usedKeys = make(map[string]struct{}, len(stringMap))
+	}
+
+	unloadSchemaFields(elem, stringMap, usedKeys)
+
 	if collectUnmapped {
 		extras := make(map[string]any, len(stringMap))
 		for key, value := range stringMap {
@@ -94,104 +101,63 @@ func unloadGremlinMapIntoStruct(v any, mapResult map[any]any) error {
 	return nil
 }
 
+// unloadSchemaFields sets struct fields from the gremlin result map using
+// the cached field plan. Keys consumed by mapped fields are recorded in
+// usedKeys when it is non-nil.
+func unloadSchemaFields(
+	elem reflect.Value,
+	stringMap map[string]any,
+	usedKeys map[string]struct{},
+) {
+	schema := schemaFor(elem.Type())
+	for i := range schema.unloadFields {
+		fieldSchema := &schema.unloadFields[i]
+		field := elem.FieldByIndex(fieldSchema.index)
+		if !field.CanInterface() || !field.CanSet() {
+			continue
+		}
+
+		// gremlinEdge fields are loaded via Preload and keyed by the Go field name.
+		if fieldSchema.isEdge {
+			value, ok := stringMap[fieldSchema.goName]
+			if !ok {
+				continue
+			}
+			if usedKeys != nil {
+				usedKeys[fieldSchema.goName] = struct{}{}
+			}
+			setEdgeFieldFromValue(field, value)
+			continue
+		}
+
+		selectedKey, ok := selectGremlinKey(
+			fieldSchema.tagName,
+			fieldSchema.subTraversalTag,
+			stringMap,
+		)
+		if !ok {
+			continue
+		}
+		if usedKeys != nil {
+			usedKeys[selectedKey] = struct{}{}
+		}
+		setFieldFromValue(field, stringMap[selectedKey])
+	}
+}
+
+var unmappedPropertiesType = reflect.TypeFor[gsmtypes.UnmappedPropertiesType]()
+
 func typeImplementsUnmappedProperties(rt reflect.Type) bool {
 	if rt == nil {
 		return false
 	}
-	unmappedType := reflect.TypeFor[gsmtypes.UnmappedPropertiesType]()
-	if rt.Implements(unmappedType) {
+	if rt.Implements(unmappedPropertiesType) {
 		return true
 	}
-	if rt.Kind() != reflect.Pointer && reflect.PointerTo(rt).Implements(unmappedType) {
+	if rt.Kind() != reflect.Pointer && reflect.PointerTo(rt).Implements(unmappedPropertiesType) {
 		return true
 	}
 	return false
-}
-
-func recursivelyUnloadIntoStruct(
-	v any,
-	stringMap map[string]any,
-	usedKeys map[string]struct{},
-	extrasFields *[]reflect.Value,
-) {
-	rv := reflect.ValueOf(v).Elem()
-	rt := rv.Type()
-
-	for i := range rv.NumField() {
-		field := rv.Field(i)
-		fieldType := rt.Field(i)
-		// handle anonymous Vertex field
-		if fieldType.Anonymous {
-			recursivelyUnloadIntoStruct(
-				field.Addr().Interface(),
-				stringMap,
-				usedKeys,
-				extrasFields,
-			)
-		}
-
-		unloadFieldFromResult(
-			field,
-			fieldType,
-			stringMap,
-			usedKeys,
-			extrasFields,
-		)
-	}
-}
-
-func unloadFieldFromResult(
-	field reflect.Value,
-	fieldType reflect.StructField,
-	stringMap map[string]any,
-	usedKeys map[string]struct{},
-	extrasFields *[]reflect.Value,
-) {
-	// Resolve and set a single struct field from the Gremlin result map.
-	gremlinTag := fieldType.Tag.Get(gsmtypes.GremlinTag)
-	gremlinSubTraversalTag := fieldType.Tag.Get(gsmtypes.GremlinSubTraversalTag)
-	if !field.CanInterface() || !field.CanSet() {
-		return
-	}
-
-	// gremlinEdge fields are loaded via Preload and keyed by the Go field name.
-	if fieldType.Tag.Get(gsmtypes.GremlinEdgeTag) != "" {
-		value, ok := stringMap[fieldType.Name]
-		if !ok {
-			return
-		}
-		usedKeys[fieldType.Name] = struct{}{}
-		setEdgeFieldFromValue(field, value)
-		return
-	}
-
-	tagParts := gremlinTagOptions{name: gremlinTag}
-	if gremlinTag != "" {
-		tagParts = parseGremlinTag(gremlinTag)
-	}
-	if tagParts.unmapped {
-		captureUnmappedField(field, extrasFields)
-		return
-	}
-
-	tagName := tagParts.name
-	if (tagName == "" || tagName == "-") &&
-		(gremlinSubTraversalTag == "" || gremlinSubTraversalTag == "-") {
-		return
-	}
-
-	selectedKey, ok := selectGremlinKey(tagName, gremlinSubTraversalTag, stringMap)
-	if !ok {
-		return
-	}
-
-	usedKeys[selectedKey] = struct{}{}
-	setFieldFromValue(field, stringMap[selectedKey])
-}
-
-func captureUnmappedField(field reflect.Value, extrasFields *[]reflect.Value) {
-	// Collect all fields marked to receive unmapped properties.
-	*extrasFields = append(*extrasFields, field)
 }
 
 func selectGremlinKey(tagName, subTraversalTag string, stringMap map[string]any) (string, bool) {
@@ -293,37 +259,19 @@ func newStructFromGremlinMap(elemType reflect.Type, value any) (reflect.Value, b
 }
 
 func getLabelFromVertex(value any) string {
-	var label string
-	if value != nil { //nolint:nestif
-		vertexValue, ok := value.(gsmtypes.CustomLabelType)
-		if ok {
-			label = vertexValue.Label()
-		} else {
-			customLabelType := reflect.TypeFor[gsmtypes.CustomLabelType]()
-			valueType := reflect.TypeOf(value)
-			if valueType != nil && valueType.Kind() != reflect.Pointer &&
-				reflect.PointerTo(valueType).Implements(customLabelType) {
-				pointerValue := reflect.New(valueType)
-				if pointerLabel, ptrOk := pointerValue.Interface().(gsmtypes.CustomLabelType); ptrOk {
-					label = pointerLabel.Label()
-				}
-			}
-		}
+	if value == nil {
+		return ""
 	}
-	if label == "" {
-		// Get the concrete type from the interface
-		concreteValue := reflect.ValueOf(value)
-		if !concreteValue.IsValid() {
-			return ""
+	// Calling Label() on the actual value preserves instance-specific labels.
+	if labeler, ok := value.(gsmtypes.CustomLabelType); ok {
+		if label := labeler.Label(); label != "" {
+			return label
 		}
-		concreteType := concreteValue.Type()
-		// Handle pointer types
-		if concreteType.Kind() == reflect.Pointer {
-			concreteType = concreteType.Elem()
-		}
-		return stringy.New(concreteType.Name()).SnakeCase().ToLower()
+		return schemaFor(reflect.TypeOf(value)).snakeName
 	}
-	return label
+	// The value itself does not implement CustomLabelType; the cached label
+	// covers the pointer-receiver case and the snake-case fallback.
+	return schemaFor(reflect.TypeOf(value)).zeroLabel
 }
 
 // func getLabelFromEdge(value gsmtypes.EdgeType) string {
@@ -344,11 +292,9 @@ func getLabelFromVertex(value any) string {
 // the label is determined by calling Label() method if available, otherwise the name of the struct converted to snake case
 // the map is the map of the struct
 // the error is the error if any
-func structToMap( //nolint:gocognit
+func structToMap(
 	value any,
 ) (map[string]any, error) {
-	mapValue := make(map[string]any)
-
 	// Get the reflection value
 	rv := reflect.ValueOf(value)
 
@@ -360,47 +306,13 @@ func structToMap( //nolint:gocognit
 	if rv.Kind() != reflect.Struct {
 		return nil, errors.New("value is not a struct")
 	}
-	// Get the type information
-	rt := rv.Type()
 
-	// Loop through all fields
-	for i := range rv.NumField() {
-		field := rt.Field(i)
-		fieldValue := rv.Field(i)
+	schema := schemaFor(rv.Type())
+	mapValue := make(map[string]any, len(schema.mapFields))
 
-		if field.Anonymous && fieldValue.Kind() == reflect.Struct {
-			// Recursively process the anonymous struct
-			anonymousMap, structMapErr := structToMap(fieldValue.Interface())
-			if structMapErr != nil {
-				return nil, fmt.Errorf(
-					"error processing anonymous field %s: %w",
-					field.Name,
-					structMapErr,
-				)
-			}
-			maps.Copy(mapValue, anonymousMap)
-			continue
-		}
-
-		// Skip sub traversal and edge tags so these dont get included when creating vertices
-		if field.Tag.Get(gsmtypes.GremlinSubTraversalTag) != "" ||
-			field.Tag.Get(gsmtypes.GremlinEdgeTag) != "" {
-			continue
-		}
-
-		// Get the gremlin tag
-		gremlinTag := field.Tag.Get(gsmtypes.GremlinTag)
-
-		// Skip if no gremlin tag or if field is not exported
-		if gremlinTag == "" || gremlinTag == "-" || !fieldValue.CanInterface() {
-			continue
-		}
-
-		// Parse tag options (e.g., "field_name,omitempty")
-		tagParts := parseGremlinTag(gremlinTag)
-		if tagParts.unmapped {
-			continue
-		}
+	for i := range schema.mapFields {
+		fieldSchema := &schema.mapFields[i]
+		fieldValue := rv.FieldByIndex(fieldSchema.index)
 
 		// Check if field is a pointer and is nil (unset)
 		if fieldValue.Kind() == reflect.Pointer {
@@ -413,15 +325,12 @@ func structToMap( //nolint:gocognit
 		}
 
 		// If omitempty is set, skip zero values
-		if tagParts.omitEmpty && fieldValue.IsZero() {
+		if fieldSchema.omitEmpty && fieldValue.IsZero() {
 			continue
 		}
 
-		// Get the field value
-		fieldInterface := fieldValue.Interface()
-
 		// Use the gremlin tag as the property name
-		mapValue[tagParts.name] = fieldInterface
+		mapValue[fieldSchema.tagName] = fieldValue.Interface()
 	}
 
 	return mapValue, nil
