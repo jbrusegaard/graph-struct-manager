@@ -369,18 +369,6 @@ func validateStructPointerWithAnonymousVertex(value any) error {
 	return errors.New("struct must contain anonymous types.Vertex field")
 }
 
-func getStructFieldNameAndType[T any](tag string) (string, reflect.Type, error) {
-	var s T
-	rt := reflect.TypeOf(s)
-	for i := range rt.NumField() {
-		field := rt.Field(i)
-		if field.Tag.Get(gsmtypes.GremlinTag) == tag {
-			return field.Name, field.Type, nil
-		}
-	}
-	return "", nil, errors.New("field not found")
-}
-
 func nextWithDefaultValue[T any](
 	query *gremlingo.GraphTraversal,
 	defaultVal T,

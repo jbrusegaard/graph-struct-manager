@@ -60,6 +60,17 @@ func schemaFor(rt reflect.Type) *typeSchema {
 	return schema.(*typeSchema) //nolint:errcheck // cache only stores *typeSchema
 }
 
+// mapFieldByTag returns the persisted-field schema whose gremlin tag matches
+// tagName, including fields from anonymous struct embeds.
+func (s *typeSchema) mapFieldByTag(tagName string) (*fieldSchema, bool) {
+	for i := range s.mapFields {
+		if s.mapFields[i].tagName == tagName {
+			return &s.mapFields[i], true
+		}
+	}
+	return nil, false
+}
+
 func buildSchema(rt reflect.Type) *typeSchema {
 	schema := &typeSchema{
 		snakeName:          stringy.New(rt.Name()).SnakeCase().ToLower(),

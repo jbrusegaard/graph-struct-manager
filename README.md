@@ -1100,6 +1100,63 @@ if err != nil {
 }
 ```
 
+### Update
+
+Updates a single property on all vertices matching the query conditions. All other
+properties are left untouched.
+
+**Signature:**
+```go
+func (q *Query[T]) Update(propertyName string, value any) error
+```
+
+**Examples:**
+```go
+// Update one property
+err := GSM.Model[TestVertex](db).
+    Where("email", comparator.EQ, "user@example.com").
+    Update("status", "active")
+
+// Slice properties are dropped and re-added so stale elements don't survive
+err := GSM.Model[TestVertex](db).
+    Where("name", comparator.EQ, "second").
+    Update("tags", []string{"go", "graph"})
+```
+
+### Updates
+
+Performs a targeted update of multiple properties in a single traversal. Only the supplied properties are written; every
+other property on the vertex is left untouched (unlike `Save`, which writes all
+struct fields). Map keys must match the `gremlin` struct tags on the model, and
+`last_modified` is refreshed automatically.
+
+The whole update is validated up front: if any key doesn't match a gremlin tag
+(or is `id`), an error is returned and nothing is written.
+
+**Signature:**
+```go
+func (q *Query[T]) Updates(properties map[string]any) error
+```
+
+**Examples:**
+```go
+// Update only two properties, leaving the rest of the vertex untouched
+err := GSM.Model[TestVertex](db).
+    Where("email", comparator.EQ, "user@example.com").
+    Updates(map[string]any{
+        "status": "active",
+        "age":    30,
+    })
+
+// Targeted update by ID
+err := GSM.Model[TestVertex](db).
+    IDs("user-123").
+    Updates(map[string]any{
+        "name": "New Name",
+        "tags": []string{"go", "graph"}, // slices replace existing values
+    })
+```
+
 ## Complete Examples
 
 ### Basic CRUD Operations

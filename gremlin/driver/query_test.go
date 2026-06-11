@@ -380,6 +380,131 @@ func TestQuery(t *testing.T) {
 		},
 	)
 	t.Run(
+		"TestUpdatesTargeted", func(t *testing.T) {
+			t.Cleanup(cleanDB)
+			err = seedData(db, seededData)
+			if err != nil {
+				t.Error(err)
+			}
+			preUpdateModel, err := driver.Model[testVertexForUtils](
+				db,
+			).Where("name", comparator.EQ, "second").
+				Take()
+			if err != nil {
+				t.Error(err)
+			}
+			err = driver.Model[testVertexForUtils](db).Where("name", comparator.EQ, "second").Updates(
+				map[string]any{
+					"name": "updated",
+					"sort": 99,
+				},
+			)
+			if err != nil {
+				t.Error("error updating properties", err)
+			}
+			model, err := driver.Model[testVertexForUtils](db).Where("name", comparator.EQ, "updated").Take()
+			if err != nil {
+				t.Error(err)
+			}
+			if model.Name != "updated" {
+				t.Errorf("Expected %s result, got %s", "updated", model.Name)
+			}
+			if model.Sort != 99 {
+				t.Errorf("Expected sort %d, got %d", 99, model.Sort)
+			}
+			// Untouched properties must survive the targeted update.
+			if !slices.Equal(model.ListTest, preUpdateModel.ListTest) {
+				t.Errorf(
+					"Expected untouched property listTest to remain %v, got %v",
+					preUpdateModel.ListTest, model.ListTest,
+				)
+			}
+			if preUpdateModel.LastModified.Equal(model.LastModified) {
+				t.Error("Expected last modified time to be updated")
+			}
+		},
+	)
+	t.Run(
+		"TestUpdatesWithSliceProperty", func(t *testing.T) {
+			t.Cleanup(cleanDB)
+			err = seedData(db, seededData)
+			if err != nil {
+				t.Error(err)
+			}
+			err = driver.Model[testVertexForUtils](db).Where("name", comparator.EQ, "second").Updates(
+				map[string]any{
+					"sort":     42,
+					"listTest": []string{"replaced"},
+				},
+			)
+			if err != nil {
+				t.Error("error updating properties", err)
+			}
+			model, err := driver.Model[testVertexForUtils](db).Where("name", comparator.EQ, "second").Take()
+			if err != nil {
+				t.Error(err)
+			}
+			if model.Sort != 42 {
+				t.Errorf("Expected sort %d, got %d", 42, model.Sort)
+			}
+			if len(model.ListTest) != 1 || model.ListTest[0] != "replaced" {
+				t.Errorf("Expected stale slice elements to be dropped, got %v", model.ListTest)
+			}
+		},
+	)
+	t.Run(
+		"TestUpdatesBadInput", func(t *testing.T) {
+			t.Cleanup(cleanDB)
+			err = seedData(db, seededData)
+			if err != nil {
+				t.Error(err)
+			}
+			err = driver.Model[testVertexForUtils](db).Updates(
+				map[string]any{
+					"name":     "valid",
+					"badField": "badValue",
+				},
+			)
+			if err == nil {
+				t.Error("Expected error for unknown property")
+			}
+			// The bad key must abort the whole update, including valid keys.
+			count, err := driver.Model[testVertexForUtils](db).Where("name", comparator.EQ, "valid").Count()
+			if err != nil {
+				t.Error(err)
+			}
+			if count != 0 {
+				t.Errorf("Expected no vertices updated, got %d", count)
+			}
+		},
+	)
+	t.Run(
+		"TestUpdatesRejectsID", func(t *testing.T) {
+			t.Cleanup(cleanDB)
+			err = seedData(db, seededData)
+			if err != nil {
+				t.Error(err)
+			}
+			err = driver.Model[testVertexForUtils](db).Updates(map[string]any{"id": "new-id"})
+			if err == nil {
+				t.Error("Expected error when updating id")
+			}
+		},
+	)
+	t.Run(
+		"TestUpdatesEmptyMap", func(t *testing.T) {
+			t.Cleanup(cleanDB)
+			err = seedData(db, seededData)
+			if err != nil {
+				t.Error(err)
+			}
+			err = driver.Model[testVertexForUtils](db).Updates(map[string]any{})
+			if err != nil {
+				t.Errorf("Expected no error for empty update map, got %v", err)
+			}
+		},
+	)
+	t.Run(
 		"TestQueryIDs", func(t *testing.T) {
 			t.Cleanup(cleanDB)
 			err = seedData(db, seededData)
