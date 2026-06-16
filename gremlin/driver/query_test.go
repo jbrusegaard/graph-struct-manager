@@ -910,6 +910,65 @@ func TestQuery(t *testing.T) {
 		},
 	)
 	t.Run(
+		"TestQueryScopes", func(t *testing.T) {
+			t.Cleanup(cleanDB)
+			err = seedData(db, seededData)
+			if err != nil {
+				t.Error(err)
+			}
+			sortGreaterThan := func(min int) driver.QueryScope[testVertexForUtils] {
+				return func(q *driver.Query[testVertexForUtils]) *driver.Query[testVertexForUtils] {
+					return q.Where("sort", comparator.GT, min)
+				}
+			}
+			orderBySortAsc := func(q *driver.Query[testVertexForUtils]) *driver.Query[testVertexForUtils] {
+				return q.OrderBy("sort", driver.Asc)
+			}
+			results, err := driver.Model[testVertexForUtils](db).
+				Scopes(sortGreaterThan(1), orderBySortAsc).
+				Find()
+			if err != nil {
+				t.Error(err)
+			}
+			if len(results) != 2 {
+				t.Errorf("Expected 2 results, got %d", len(results))
+			}
+			if results[0].Name != "second" || results[1].Name != "third" {
+				t.Errorf(
+					"Expected second and third results, got %s and %s",
+					results[0].Name, results[1].Name,
+				)
+			}
+		},
+	)
+	t.Run(
+		"TestQueryScopesNilAndComposed", func(t *testing.T) {
+			t.Cleanup(cleanDB)
+			err = seedData(db, seededData)
+			if err != nil {
+				t.Error(err)
+			}
+			// A scope can call Scopes to compose other scopes; nil scopes are skipped.
+			onlyFirst := func(q *driver.Query[testVertexForUtils]) *driver.Query[testVertexForUtils] {
+				return q.Scopes(
+					nil,
+					func(q *driver.Query[testVertexForUtils]) *driver.Query[testVertexForUtils] {
+						return q.Where("name", comparator.EQ, "first")
+					},
+				)
+			}
+			result, err := driver.Model[testVertexForUtils](db).
+				Scopes(onlyFirst).
+				Take()
+			if err != nil {
+				t.Error(err)
+			}
+			if result.Name != "first" {
+				t.Errorf("Expected first result, got %s", result.Name)
+			}
+		},
+	)
+	t.Run(
 		"Test Invalid Labels", func(t *testing.T) {
 			t.Cleanup(cleanDB)
 			err = seedData(db, seededData)

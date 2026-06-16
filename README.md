@@ -19,6 +19,7 @@ A type-safe, chainable query builder for Gremlin graph databases in Go. This ORM
   - [WhereTraversal](#wheretraversal)
   - [AddSubTraversal](#addsubtraversal)
   - [Preload](#preload)
+  - [Scopes](#scopes)
 - [Labels](#labels)
 - [Select](#select)
   - [Dedup](#dedup)
@@ -709,6 +710,59 @@ person, err := GSM.Model[Person](db).PreloadDedup("Topics.Posts").Take()
 - Only relationships named in preload paths are loaded; relationships declared on related structs are not loaded implicitly
 - Each nested level fans out the traversal and duplicates shared vertices per parent, so keep paths reasonably shallow on dense graphs
 - Edges themselves must already exist; create them with a raw traversal, e.g. `db.G().V(personID).AddE("subscribed").To(gremlingo.T__.V(topicID)).Iterate()`
+
+### Scopes
+
+Scopes let you package commonly used query logic (filters, ordering, pagination) into reusable functions and apply them with `Scopes()`. This is inspired by [GORM's Scopes](https://gorm.io/docs/scopes.html), adapted for the GSM query builder.
+
+A scope is any function that takes a `*Query[T]` and returns a `*Query[T]`. The `QueryScope[T]` type is provided for convenience, especially for parameterized scopes.
+
+**Signature:**
+```go
+type QueryScope[T any] func(*Query[T]) *Query[T]
+
+func (q *Query[T]) Scopes(scopes ...QueryScope[T]) *Query[T]
+```
+
+**How it works:**
+- Each scope receives the query, applies one or more chainable steps, and returns the query
+- Scopes are applied in order, left to right
+- Nil scopes (and scopes that return `nil`) are ignored, so a single bad scope can't drop the rest of the chain
+- Scopes can call `Scopes()` themselves to compose other scopes
+
+**Examples:**
+
+```go
+// A plain scope: matches the QueryScope[User] signature directly
+func ActiveUsers(q *driver.Query[User]) *driver.Query[User] {
+    return q.Where("status", comparator.EQ, "active")
+}
+
+// A parameterized scope: returns a QueryScope[User]
+func OlderThan(age int) driver.QueryScope[User] {
+    return func(q *driver.Query[User]) *driver.Query[User] {
+        return q.Where("age", comparator.GT, age)
+    }
+}
+
+// Reusable pagination scope
+func Paginate(page, pageSize int) driver.QueryScope[User] {
+    return func(q *driver.Query[User]) *driver.Query[User] {
+        return q.Offset((page - 1) * pageSize).Limit(pageSize)
+    }
+}
+
+// Apply scopes to a query
+activeAdults, err := driver.Model[User](db).
+    Scopes(ActiveUsers, OlderThan(21)).
+    OrderBy("name", driver.Asc).
+    Find()
+
+// Reuse the same scopes elsewhere with different combinations
+page2, err := driver.Model[User](db).
+    Scopes(ActiveUsers, Paginate(2, 20)).
+    Find()
+```
 
 ### Labels
 

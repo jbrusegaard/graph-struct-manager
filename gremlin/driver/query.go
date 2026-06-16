@@ -190,6 +190,46 @@ func (q *Query[T]) WhereTraversal(traversal *gremlingo.GraphTraversal) *Query[T]
 	return q
 }
 
+// QueryScope is a reusable piece of query logic, inspired by GORM scopes.
+// A scope receives the query, applies one or more chainable steps, and
+// returns the (mutated) query so scopes can be composed and reused across
+// queries.
+type QueryScope[T any] func(*Query[T]) *Query[T]
+
+// Scopes applies one or more reusable QueryScope functions to the query, in
+// order. This lets you package commonly used logic (filters, ordering,
+// pagination) and reuse it across queries, similar to GORM's Scopes.
+//
+// Example:
+//
+//	func ActiveUsers(q *driver.Query[User]) *driver.Query[User] {
+//	    return q.Where("status", comparator.EQ, "active")
+//	}
+//
+//	func OlderThan(age int) driver.QueryScope[User] {
+//	    return func(q *driver.Query[User]) *driver.Query[User] {
+//	        return q.Where("age", comparator.GT, age)
+//	    }
+//	}
+//
+//	users, err := driver.Model[User](db).
+//	    Scopes(ActiveUsers, OlderThan(21)).
+//	    Find()
+//
+// Nil scopes and scopes that return nil are ignored so a single bad scope
+// can't drop the rest of the chain.
+func (q *Query[T]) Scopes(scopes ...QueryScope[T]) *Query[T] {
+	for _, scope := range scopes {
+		if scope == nil {
+			continue
+		}
+		if next := scope(q); next != nil {
+			q = next
+		}
+	}
+	return q
+}
+
 // Dedup removes duplicate results from the query
 func (q *Query[T]) Dedup() *Query[T] {
 	q.writeDebugString(".Dedup()")
