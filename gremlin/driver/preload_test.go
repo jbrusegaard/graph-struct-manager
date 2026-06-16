@@ -119,6 +119,83 @@ func TestPreload(t *testing.T) {
 	)
 
 	t.Run(
+		"TestPreloadDedup", func(t *testing.T) {
+			t.Cleanup(cleanDB)
+			person := testPerson{Name: "alice"}
+			if err := driver.Create(db, &person); err != nil {
+				t.Fatal(err)
+			}
+			topic := testTopic{Title: "graphs"}
+			if err := driver.Create(db, &topic); err != nil {
+				t.Fatal(err)
+			}
+			// two parallel subscribed edges to the same topic
+			addEdge(t, db, person.ID, "subscribed", topic.ID)
+			addEdge(t, db, person.ID, "subscribed", topic.ID)
+
+			// without dedup the same topic is loaded twice
+			withDup, err := driver.Model[testPerson](db).Preload("Topics").Take()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(withDup.Topics) != 2 {
+				t.Fatalf("Expected 2 topics without dedup, got %d", len(withDup.Topics))
+			}
+
+			// with dedup the duplicate is removed
+			deduped, err := driver.Model[testPerson](db).PreloadDedup("Topics").Take()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(deduped.Topics) != 1 {
+				t.Fatalf("Expected 1 topic with dedup, got %d", len(deduped.Topics))
+			}
+			if deduped.Topics[0].Title != "graphs" {
+				t.Errorf("Expected graphs topic, got %s", deduped.Topics[0].Title)
+			}
+			if deduped.Topics[0].ID == nil {
+				t.Error("Expected deduped topic ID to be loaded")
+			}
+		},
+	)
+
+	t.Run(
+		"TestPreloadDedupNested", func(t *testing.T) {
+			t.Cleanup(cleanDB)
+			person := testPersonNested{Name: "alice"}
+			if err := driver.Create(db, &person); err != nil {
+				t.Fatal(err)
+			}
+			topic := testTopicWithPosts{Title: "graphs"}
+			if err := driver.Create(db, &topic); err != nil {
+				t.Fatal(err)
+			}
+			addEdge(t, db, person.ID, "subscribed", topic.ID)
+			post := testPost{Title: "intro to gremlin"}
+			if err := driver.Create(db, &post); err != nil {
+				t.Fatal(err)
+			}
+			// two parallel contains edges to the same post
+			addEdge(t, db, topic.ID, "contains", post.ID)
+			addEdge(t, db, topic.ID, "contains", post.ID)
+
+			result, err := driver.Model[testPersonNested](db).PreloadDedup("Topics.Posts").Take()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(result.Topics) != 1 {
+				t.Fatalf("Expected 1 topic, got %d", len(result.Topics))
+			}
+			if len(result.Topics[0].Posts) != 1 {
+				t.Fatalf("Expected 1 deduped post, got %d", len(result.Topics[0].Posts))
+			}
+			if result.Topics[0].Posts[0].Title != "intro to gremlin" {
+				t.Errorf("Expected post title to be loaded, got %+v", result.Topics[0].Posts[0])
+			}
+		},
+	)
+
+	t.Run(
 		"TestPreloadWithFind", func(t *testing.T) {
 			t.Cleanup(cleanDB)
 			seedPreloadData(t, db)
