@@ -616,6 +616,7 @@ Eagerly loads related GSM vertex structs over edges, similar to GORM association
 **Signature:**
 ```go
 func (q *Query[T]) Preload(fieldNames ...string) *Query[T]
+func (q *Query[T]) PreloadDedup(fieldNames ...string) *Query[T]
 ```
 
 **The `gremlinEdge` tag:**
@@ -682,6 +683,15 @@ topic, err := GSM.Model[TopicWithSubscribers](db).
     Where("title", comparator.EQ, "graphs").
     Preload("Subscribers").
     Take()
+
+// Deduplicate a loaded relationship slice (by vertex identity). Useful when
+// the same vertex is reachable through more than one edge, e.g. "both"
+// direction edges or multiple parallel edges.
+person, err := GSM.Model[Person](db).PreloadDedup("Friends").Find()
+
+// Dedup applies to the relationship at the end of the path, so this
+// deduplicates each topic's Posts slice
+person, err := GSM.Model[Person](db).PreloadDedup("Topics.Posts").Take()
 ```
 
 **How it works:**
@@ -690,6 +700,7 @@ topic, err := GSM.Model[TopicWithSubscribers](db).
 - GSM builds the edge traversal automatically, filters related vertices by the related struct's label, and maps each result into the related struct (including its `gremlin` tagged fields and vertex metadata)
 - Nested paths can mix directions and reference self-referential types (e.g. `"Subscribers.BestFriend"`); separate `Preload` calls for overlapping paths merge into one traversal
 - For non-slice fields, the first related vertex is loaded; pointer fields stay `nil` when no edge exists
+- `PreloadDedup()` behaves like `Preload()` but removes duplicate related vertices (deduplicated by vertex identity) from the loaded slice; dedup applies to the relationship at the end of each path
 - Works with `Find()`, `Take()`, and `ID()`
 
 **Important notes:**

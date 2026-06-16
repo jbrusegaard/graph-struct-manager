@@ -31,7 +31,8 @@ Gremlin traversals.
   `AddSubTraversal` usage.
 - Use `gremlinEdge:"edge_label[,out|in|both]"` for related-vertex fields loaded via
   `Preload(goFieldName)`; nested paths use dots (`Preload("Topics.Posts")`). These
-  fields are never persisted as properties.
+  fields are never persisted as properties. `PreloadDedup` dedups the loaded slice
+  by vertex identity at the relationship at the end of the path.
 - Label resolution: `Label() string` wins; empty label defaults to snake_case struct name.
 
 ## Query Builder Design

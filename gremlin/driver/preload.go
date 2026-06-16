@@ -14,6 +14,9 @@ import (
 // a Go struct field name on the related type of the parent node.
 type preloadNode struct {
 	children map[string]*preloadNode
+	// dedup removes duplicate related vertices from this relationship's loaded
+	// slice (deduplicated by vertex identity).
+	dedup bool
 }
 
 func newPreloadNode() *preloadNode {
@@ -48,12 +51,27 @@ func newPreloadNode() *preloadNode {
 // For non-slice fields the first related vertex is loaded. Invalid preloads
 // surface as errors from Find/Take/ID.
 func (q *Query[T]) Preload(fieldPaths ...string) *Query[T] {
+	return q.preload(false, fieldPaths...)
+}
+
+// PreloadDedup behaves like Preload but removes duplicate related vertices
+// from each loaded slice, deduplicated by vertex identity. This is useful when
+// a relationship can reach the same vertex through more than one edge (for
+// example "both" direction edges or multiple parallel edges).
+//
+// Dedup applies to the relationship at the end of each path, so
+// PreloadDedup("Topics.Posts") deduplicates the Posts slice on each topic.
+func (q *Query[T]) PreloadDedup(fieldPaths ...string) *Query[T] {
+	return q.preload(true, fieldPaths...)
+}
+
+func (q *Query[T]) preload(dedup bool, fieldPaths ...string) *Query[T] {
 	modelType := reflect.TypeFor[T]()
 	if modelType.Kind() == reflect.Pointer {
 		modelType = modelType.Elem()
 	}
 	for _, fieldPath := range fieldPaths {
-		rootField, err := q.mergePreloadPath(fieldPath)
+		rootField, err := q.mergePreloadPath(fieldPath, dedup)
 		if err != nil {
 			q.err = err
 			return q
@@ -63,7 +81,11 @@ func (q *Query[T]) Preload(fieldPaths ...string) *Query[T] {
 			q.err = err
 			return q
 		}
-		q.writeDebugString(".Preload(")
+		if dedup {
+			q.writeDebugString(".PreloadDedup(")
+		} else {
+			q.writeDebugString(".Preload(")
+		}
 		q.writeDebugString(fieldPath)
 		q.writeDebugString(")")
 		q.subTraversals[rootField] = traversal
@@ -72,8 +94,9 @@ func (q *Query[T]) Preload(fieldPaths ...string) *Query[T] {
 }
 
 // mergePreloadPath merges a dot separated preload path into the query's
-// preload tree and returns the root field name.
-func (q *Query[T]) mergePreloadPath(fieldPath string) (string, error) {
+// preload tree and returns the root field name. When dedup is true, the leaf
+// node of the path is marked to deduplicate its related vertices.
+func (q *Query[T]) mergePreloadPath(fieldPath string, dedup bool) (string, error) {
 	parts := strings.Split(fieldPath, ".")
 	if slices.Contains(parts, "") {
 		return "", fmt.Errorf("preload: invalid path %q", fieldPath)
@@ -82,13 +105,18 @@ func (q *Query[T]) mergePreloadPath(fieldPath string) (string, error) {
 		q.preloads = make(map[string]*preloadNode)
 	}
 	children := q.preloads
+	var node *preloadNode
 	for _, part := range parts {
-		node, ok := children[part]
+		n, ok := children[part]
 		if !ok {
-			node = newPreloadNode()
-			children[part] = node
+			n = newPreloadNode()
+			children[part] = n
 		}
-		children = node.children
+		node = n
+		children = n.children
+	}
+	if dedup {
+		node.dedup = true
 	}
 	return parts[0], nil
 }
@@ -146,6 +174,10 @@ func buildPreloadTraversal(
 	relatedSchema := schemaFor(relatedType)
 	if relatedSchema.zeroLabel != "" {
 		traversal = traversal.HasLabel(relatedSchema.zeroLabel)
+	}
+
+	if node != nil && node.dedup {
+		traversal = traversal.Dedup()
 	}
 
 	valueMapArgs := relatedSchema.selectedFields
