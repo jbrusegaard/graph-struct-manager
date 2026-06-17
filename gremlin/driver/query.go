@@ -303,7 +303,7 @@ func (q *Query[T]) Labels(labels ...string) *Query[T] {
 //   - Range(0, 20) will return results 0-19
 func (q *Query[T]) Range(lower int, upper int) *Query[T] {
 	if q.offset != nil {
-		q.db.logger.Warn(
+		q.db.logger.Warnf(
 			"Range should not be used with offset! It will be ignored.",
 		)
 		return q
@@ -320,7 +320,7 @@ func (q *Query[T]) Range(lower int, upper int) *Query[T] {
 // Select adds selected fields to the query
 func (q *Query[T]) Select(fields ...string) *Query[T] {
 	if len(q.selectedFields) == 0 {
-		q.db.logger.Warn(
+		q.db.logger.Warnf(
 			"Select was already defined secondary select will override original select!",
 		)
 	}
@@ -337,7 +337,7 @@ func (q *Query[T]) Select(fields ...string) *Query[T] {
 // OrderBy adds ordering to the query
 func (q *Query[T]) OrderBy(field string, order GremlinOrder) *Query[T] {
 	if q.orderBy != nil {
-		q.db.logger.Warn(
+		q.db.logger.Warnf(
 			"Order by was already defined secondary order by will override original order",
 		)
 	}

@@ -9,5 +9,5 @@ import (
 func TestLog(t *testing.T) {
 	t.Parallel()
 	logger := gsmlog.InitializeLogger()
-	logger.Info("Hello, world!")
+	logger.Infof("Hello, world!")
 }

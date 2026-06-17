@@ -326,6 +326,7 @@ The `Open` function accepts an optional configuration parameter that allows you 
 type Config struct {
     Driver      DatabaseDriver  // Database driver type (Gremlin or Neptune)
     IDGenerator func() any      // Custom ID generator function
+    Logger      log.Logger      // Custom logger (optional, defaults to the built-in logger)
 }
 ```
 
@@ -421,6 +422,69 @@ db, err := driver.Open("wss://neptune-endpoint:8182", driver.Config{
 - The generator function should be thread-safe if used in concurrent environments
 - Individual vertices can still override the ID by setting the `ID` field before calling `Create` (see [Custom IDs](#custom-ids) section)
 
+### Custom Logger
+
+By default the driver logs through a built-in logger whose level is controlled by the [`GSM_LOG_LEVEL`](#gsm_log_level) environment variable. If you want to route the driver's logs through your own logging stack (similar to [GORM's logger](https://gorm.io/docs/logger.html)), you can provide any value that satisfies the `log.Logger` interface via `Config.Logger`.
+
+**Interface:**
+
+```go
+// github.com/jbrusegaard/graph-struct-manager/log
+type Logger interface {
+    Debugf(format string, args ...any)
+    Infof(format string, args ...any)
+    Warnf(format string, args ...any)
+    Errorf(format string, args ...any)
+}
+```
+
+The interface is printf-style. The default logger is backed by the standard library's [`log/slog`](https://pkg.go.dev/log/slog) using a built-in colorized handler (`log.ColorHandler`). Colors are enabled automatically when stdout is a terminal and the `NO_COLOR` environment variable is unset. Most logging libraries can be adapted with a thin wrapper.
+
+**Using your own `*slog.Logger`:**
+
+```go
+import (
+    "log/slog"
+    "os"
+
+    gsmlog "github.com/jbrusegaard/graph-struct-manager/log"
+    gsmdriver "github.com/jbrusegaard/graph-struct-manager/gremlin/driver"
+)
+
+handler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug})
+db, err := gsmdriver.Open("ws://localhost:8182", gsmdriver.Config{
+    Logger: gsmlog.NewSlogLogger(slog.New(handler)),
+})
+```
+
+**Example (wrapping the standard library logger):**
+
+```go
+import (
+    "log"
+
+    gsmdriver "github.com/jbrusegaard/graph-struct-manager/gremlin/driver"
+)
+
+type stdLogger struct{ l *log.Logger }
+
+func (s stdLogger) Debugf(format string, args ...any) { s.l.Printf("DEBUG "+format, args...) }
+func (s stdLogger) Infof(format string, args ...any)  { s.l.Printf("INFO "+format, args...) }
+func (s stdLogger) Warnf(format string, args ...any)  { s.l.Printf("WARN "+format, args...) }
+func (s stdLogger) Errorf(format string, args ...any) { s.l.Printf("ERROR "+format, args...) }
+
+db, err := gsmdriver.Open("ws://localhost:8182", gsmdriver.Config{
+    Logger: stdLogger{l: log.Default()},
+})
+```
+
+**When to use a custom logger:**
+- When you want driver logs to flow through your application's existing logging pipeline
+- When you need structured logging or a specific output format/destination
+- When integrating with log aggregation tooling
+
+> If `Logger` is `nil` (default), the built-in logger is used and its verbosity is controlled by `GSM_LOG_LEVEL`.
+
 ## Environment Variables
 
 GraphStructManager supports the following environment variables for configuration and debugging:
@@ -437,6 +501,15 @@ Controls the logging level for the library. Available values:
 **Example:**
 ```bash
 export GSM_LOG_LEVEL=debug
+```
+
+### NO_COLOR
+
+When set to any non-empty value, disables colorized output in the default logger. Color is otherwise enabled automatically when logs are written to a terminal. See [no-color.org](https://no-color.org/).
+
+**Example:**
+```bash
+export NO_COLOR=1
 ```
 
 ### GSM_DEBUG

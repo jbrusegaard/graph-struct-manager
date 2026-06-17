@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	gremlingo "github.com/apache/tinkerpop/gremlin-go/v3/driver"
-	"github.com/charmbracelet/log"
 	"github.com/jbrusegaard/graph-struct-manager/comparator"
 	"github.com/jbrusegaard/graph-struct-manager/gsmtypes"
 	appLogger "github.com/jbrusegaard/graph-struct-manager/log"
@@ -21,7 +20,7 @@ const (
 type GremlinDriver struct {
 	remoteConn  *gremlingo.DriverRemoteConnection
 	g           *gremlingo.GraphTraversalSource
-	logger      *log.Logger
+	logger      appLogger.Logger
 	dbDriver    DatabaseDriver
 	idGenerator func() any
 	// tx is non-nil when this driver is bound to an open transaction
@@ -37,6 +36,9 @@ type Config struct {
 	Driver                    DatabaseDriver
 	IDGenerator               func() any
 	GremlinConnectionSettings func(settings *gremlingo.DriverRemoteConnectionSettings)
+	// Logger overrides the default logger. When nil, the default logger
+	// (configured via GSM_LOG_LEVEL) is used.
+	Logger appLogger.Logger
 }
 
 var defaultDriverConfig = Config{
@@ -53,8 +55,6 @@ func g(remoteConnection *gremlingo.DriverRemoteConnection) *gremlingo.GraphTrave
 }
 
 func Open(url string, config ...Config) (*GremlinDriver, error) {
-	driverLogger := appLogger.InitializeLogger()
-	driverLogger.Infof("Opening driver with url: %s/gremlin", url)
 	var configStruct Config
 	var remote *gremlingo.DriverRemoteConnection
 	var err error
@@ -63,6 +63,14 @@ func Open(url string, config ...Config) (*GremlinDriver, error) {
 	} else {
 		configStruct = defaultDriverConfig
 	}
+
+	var driverLogger appLogger.Logger
+	if configStruct.Logger != nil {
+		driverLogger = configStruct.Logger
+	} else {
+		driverLogger = appLogger.InitializeLogger()
+	}
+	driverLogger.Infof("Opening driver with url: %s/gremlin", url)
 	if configStruct.GremlinConnectionSettings == nil {
 		remote, err = gremlingo.NewDriverRemoteConnection(fmt.Sprintf("%s/gremlin", url))
 		if err != nil {
