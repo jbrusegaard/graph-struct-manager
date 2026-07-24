@@ -45,6 +45,10 @@ type typeSchema struct {
 	unloadFields []fieldSchema
 	// mapFields drives structToMap for create/update.
 	mapFields []fieldSchema
+	// lastModifiedProperty is the property the driver automatically
+	// refreshes on create/save/update. Empty when the type disables
+	// tracking via gsmtypes.LastModifiedPropertyType.
+	lastModifiedProperty string
 }
 
 // schemaFor returns the cached schema for rt, computing it on first use.
@@ -77,6 +81,7 @@ func buildSchema(rt reflect.Type) *typeSchema {
 		implementsUnmapped: typeImplementsUnmappedProperties(rt),
 	}
 	schema.zeroLabel = zeroValueLabel(rt, schema.snakeName)
+	schema.lastModifiedProperty = resolveLastModifiedProperty(rt)
 	if rt.Kind() != reflect.Struct {
 		return schema
 	}
@@ -88,6 +93,19 @@ func buildSchema(rt reflect.Type) *typeSchema {
 	schema.unloadFields = collectUnloadFields(rt, nil)
 	schema.mapFields = collectMapFields(rt, nil)
 	return schema
+}
+
+// resolveLastModifiedProperty returns the property the driver automatically
+// refreshes with the current time on create/save/update for rt. Types may
+// rename the property (or disable tracking entirely by returning "") via
+// gsmtypes.LastModifiedPropertyType; every other type keeps the default
+// gsmtypes.LastModified property.
+func resolveLastModifiedProperty(rt reflect.Type) string {
+	// reflect.New covers both value and pointer receiver implementations.
+	if tracker, ok := reflect.New(rt).Interface().(gsmtypes.LastModifiedPropertyType); ok {
+		return tracker.LastModifiedProperty()
+	}
+	return gsmtypes.LastModified
 }
 
 // zeroValueLabel resolves the label for a zero value of rt, preferring a

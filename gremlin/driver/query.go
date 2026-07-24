@@ -486,7 +486,9 @@ func (q *Query[T]) Update(propertyName string, value any) error {
 // every other property on the vertex is left untouched. Map keys must match
 // the gremlin struct tags on T.
 // NOTE: Slices will be updated as Cardinality.Set
-// NOTE: last_modified is always refreshed as part of the update
+// NOTE: the model's last-modified property (last_modified by default) is
+// refreshed as part of the update; models can rename or disable this via
+// gsmtypes.LastModifiedPropertyType
 func (q *Query[T]) Updates(properties map[string]any) error {
 	if q.err != nil {
 		return q.err
@@ -522,7 +524,9 @@ func (q *Query[T]) Updates(properties map[string]any) error {
 	}
 
 	query := q.BuildQuery()
-	query.Property(cardinality.Single, gsmtypes.LastModified, time.Now().UTC())
+	if lastModifiedProperty := schema.lastModifiedProperty; lastModifiedProperty != "" {
+		query.Property(cardinality.Single, lastModifiedProperty, time.Now().UTC())
+	}
 	for _, key := range keys {
 		query = q.applyPropertyUpdate(query, key, fieldTypes[key], properties[key])
 	}

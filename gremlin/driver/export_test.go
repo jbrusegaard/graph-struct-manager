@@ -1,6 +1,10 @@
 package driver
 
-import "github.com/jbrusegaard/graph-struct-manager/gsmtypes"
+import (
+	"reflect"
+
+	"github.com/jbrusegaard/graph-struct-manager/gsmtypes"
+)
 
 // GremlinTagOptionsForTest mirrors gremlinTagOptions for external tests.
 type GremlinTagOptionsForTest struct {
@@ -46,4 +50,10 @@ func GetLabelFromVertexForTest(value gsmtypes.VertexType) string {
 
 func ValidateStructPointerWithAnonymousVertexForTest(value any) error {
 	return validateStructPointerWithAnonymousVertex(value)
+}
+
+// LastModifiedPropertyForTest exposes the cached last-modified property
+// resolution for external tests.
+func LastModifiedPropertyForTest[T any]() string {
+	return schemaFor(reflect.TypeFor[T]()).lastModifiedProperty
 }
