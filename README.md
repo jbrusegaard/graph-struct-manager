@@ -7,6 +7,7 @@ A type-safe, chainable query builder for Gremlin graph databases in Go. This ORM
 - [Overview](#overview)
 - [Setup](#setup)
   - [Custom Labels](#custom-labels)
+  - [Customizing Last-Modified Tracking](#customizing-last-modified-tracking)
 - [Database Configuration](#database-configuration)
   - [Database Driver Types](#database-driver-types)
   - [Custom ID Generator](#custom-id-generator)
@@ -160,6 +161,57 @@ func (u User) Label() string {
 **Default behavior:**
 If you don't implement `Label()`, or if `Label()` returns an empty string, the system will automatically use the struct name normalized to snake_case (e.g., `MyCustomVertex` → `my_custom_vertex`). This ensures backward compatibility with existing code.
 
+### Customizing Last-Modified Tracking
+
+By default, GSM automatically refreshes the `last_modified` property whenever a vertex is created (`Create`/`Save`) or updated (`Save`, `Update`, `Updates`). You can rename this property, or disable the automatic tracking entirely, per model by implementing `gsmtypes.LastModifiedPropertyType`:
+
+```go
+type LastModifiedPropertyType interface {
+    LastModifiedProperty() string
+}
+```
+
+**Renaming the tracked property:**
+```go
+type Article struct {
+    types.Vertex
+    Title     string    `gremlin:"title"`
+    UpdatedAt time.Time `gremlin:"updated_at"`
+}
+
+// Query.Update/Query.Updates will refresh "updated_at" instead of "last_modified"
+func (a *Article) LastModifiedProperty() string {
+    return "updated_at"
+}
+```
+
+**Disabling tracking for legacy schemas:**
+
+Legacy data schemas can reject writes that contain unexpected properties. Return an empty string to stop GSM from ever writing a last-modified property on its own:
+
+```go
+type LegacyRecord struct {
+    ID   any    `gremlin:"id"`
+    Name string `gremlin:"name"`
+}
+
+// ... implement the gsmtypes.VertexType methods ...
+
+// Disable automatic last-modified tracking for this model only
+func (r *LegacyRecord) LastModifiedProperty() string {
+    return ""
+}
+```
+
+With tracking disabled:
+- `Create` and `Save` no longer call `SetVertexLastModified` automatically, so only values you set explicitly are persisted (through the model's `gremlin` tags).
+- `Query.Update`/`Query.Updates` no longer inject a last-modified property into the update traversal.
+
+**Important notes:**
+- Models that don't implement the interface keep the default `last_modified` behavior, so existing code is unaffected.
+- The property is resolved once per model type from a zero value and cached; the implementation must return a constant that does not depend on receiver state.
+- For struct-based writes (`Create`/`Save`), the persisted property name always comes from the field's `gremlin` tag. If you rename the tracked property, also override `SetVertexLastModified`/`GetVertexLastModified` to use your custom field, or avoid embedding `types.Vertex`'s `last_modified` tag.
+
 ### Custom IDs
 
 By default, the graph database automatically generates unique IDs for new vertices. However, you can provide a custom ID by setting the `ID` field in your struct before calling the `Create` function. This is useful when you need to maintain specific ID formats or integrate with existing systems.
@@ -212,6 +264,7 @@ Hooks receive the `*GremlinDriver` used for the operation and can abort by retur
 **Order of execution:**
 - `Create` calls `BeforeCreate`, writes the vertex, sets `ID/CreatedAt/LastModified`, then `AfterCreate`.
 - `Save` uses `BeforeCreate`/`AfterCreate` when `ID` is empty, otherwise uses `BeforeUpdate`/`AfterUpdate`, writes the changes, and updates `LastModified`.
+- Automatic `LastModified` stamping is skipped for models that disable it via [`gsmtypes.LastModifiedPropertyType`](#customizing-last-modified-tracking).
 - `Find`/`Take`/`ID` call `AfterFind` on each loaded vertex before returning.
 
 **Example:**
@@ -1266,7 +1319,8 @@ err := GSM.Model[TestVertex](db).
 Performs a targeted update of multiple properties in a single traversal. Only the supplied properties are written; every
 other property on the vertex is left untouched (unlike `Save`, which writes all
 struct fields). Map keys must match the `gremlin` struct tags on the model, and
-`last_modified` is refreshed automatically.
+`last_modified` is refreshed automatically (models can rename or disable this
+via [`gsmtypes.LastModifiedPropertyType`](#customizing-last-modified-tracking)).
 
 The whole update is validated up front: if any key doesn't match a gremlin tag
 (or is `id`), an error is returned and nothing is written.

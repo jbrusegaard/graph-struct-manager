@@ -13,6 +13,13 @@ func Create[T any](db *GremlinDriver, value *T) error {
 	return createVertex(db, value)
 }
 
+// tracksLastModified reports whether the driver should automatically stamp
+// the value's last-modified timestamp. Models opt out (or rename the tracked
+// property) via gsmtypes.LastModifiedPropertyType.
+func tracksLastModified(value any) bool {
+	return schemaFor(reflect.TypeOf(value)).lastModifiedProperty != ""
+}
+
 func getSlicePropertyNames(propertyMap map[string]any) []any {
 	var slicePropertyNames []any
 	for k, v := range propertyMap {
@@ -28,8 +35,9 @@ func updateVertex[T any](db *GremlinDriver, value *T) error {
 	if !ok {
 		return errors.New("value does not implement VertexType")
 	}
-	now := time.Now().UTC()
-	vertex.SetVertexLastModified(now)
+	if tracksLastModified(value) {
+		vertex.SetVertexLastModified(time.Now().UTC())
+	}
 	err := runBeforeUpdateHook(db, value)
 	if err != nil {
 		return err
@@ -69,7 +77,9 @@ func createVertex[T any](db *GremlinDriver, value *T) error {
 	}
 	now := time.Now().UTC()
 	vertex.SetVertexCreatedAt(now)
-	vertex.SetVertexLastModified(now)
+	if tracksLastModified(value) {
+		vertex.SetVertexLastModified(now)
+	}
 	err := runBeforeCreateHook(db, value)
 	if err != nil {
 		return err
