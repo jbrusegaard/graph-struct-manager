@@ -534,6 +534,74 @@ func (q *Query[T]) Updates(properties map[string]any) error {
 	return <-errChan
 }
 
+// RemoveProperty removes a single property from all matching vertices.
+// NOTE: this differs from Update(propertyName, nil), which would write a
+// null/zero value: RemoveProperty drops the property key entirely.
+func (q *Query[T]) RemoveProperty(propertyName string) error {
+	return q.RemoveProperties(propertyName)
+}
+
+// RemoveProperties removes one or more properties from all matching vertices
+// in a single traversal. Every other property on the vertex is left
+// untouched. Names must match the gremlin struct tags on T.
+// NOTE: the model's last-modified property (last_modified by default) is
+// refreshed as part of the removal; models can rename or disable this via
+// gsmtypes.LastModifiedPropertyType
+func (q *Query[T]) RemoveProperties(propertyNames ...string) error {
+	if q.err != nil {
+		return q.err
+	}
+	if len(propertyNames) == 0 {
+		return nil
+	}
+	rt := reflect.TypeFor[T]()
+	if rt.Kind() == reflect.Pointer {
+		rt = rt.Elem()
+	}
+	schema := schemaFor(rt)
+
+	// De-duplicate and sort so the generated traversal and debug output are
+	// deterministic regardless of caller-supplied ordering/duplicates.
+	keySet := make(map[string]struct{}, len(propertyNames))
+	for _, name := range propertyNames {
+		keySet[name] = struct{}{}
+	}
+	keys := make([]string, 0, len(keySet))
+	for key := range keySet {
+		keys = append(keys, key)
+	}
+	slices.Sort(keys)
+
+	// Validate every property before touching the database so a bad key
+	// can't leave a partial removal behind.
+	for _, key := range keys {
+		if key == "id" {
+			return errors.New("cannot remove vertex id")
+		}
+		if _, ok := schema.mapFieldByTag(key); !ok {
+			return fmt.Errorf("propertyName not found in gremlin struct tags: %s", key)
+		}
+	}
+
+	query := q.BuildQuery()
+	if lastModifiedProperty := schema.lastModifiedProperty; lastModifiedProperty != "" {
+		q.writeDebugString(".Property(Cardinality.Single, ")
+		q.writeDebugString(lastModifiedProperty)
+		q.writeDebugString(", <now>)")
+		query = query.Property(cardinality.Single, lastModifiedProperty, time.Now().UTC())
+	}
+	q.writeDebugString(".SideEffect(Properties(")
+	q.writeDebugString(strings.Join(keys, ", "))
+	q.writeDebugString(").Drop())")
+	keyArgs := make([]any, len(keys))
+	for i, key := range keys {
+		keyArgs[i] = key
+	}
+	query = query.SideEffect(anonymousTraversal.Properties(keyArgs...).Drop())
+	errChan := query.Iterate()
+	return <-errChan
+}
+
 // applyPropertyUpdate appends the Property steps for a single property to the
 // traversal. Multi-valued (slice) properties are dropped first so stale
 // elements don't survive the update.
