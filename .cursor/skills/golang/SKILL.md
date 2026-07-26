@@ -24,7 +24,11 @@ Gremlin traversals.
 ## Graph Model Conventions
 
 - Vertex structs must embed `gsmtypes.Vertex` anonymously; `Create`/`Update` validate this.
-- Edge structs (when used) embed `gsmtypes.Edge` and implement `gsmtypes.EdgeType`.
+- Edge structs embed `gsmtypes.Edge` anonymously and implement `gsmtypes.EdgeType`. Create
+  edges with `CreateEdge(db, &edge, from, to)` / `SaveEdge`; endpoints accept vertex structs
+  or raw IDs. `Model[E]` auto-detects edge types (schema `isEdge`) and traverses `g.E()`.
+- Edge properties are single-valued: never pass a Cardinality argument when writing edge
+  properties (TinkerPop rejects it); `Preload` is vertex-only.
 - Use `gremlin:"field_name"` tags for properties; `gremlin:"field_name,omitempty"` skips
   zero values and nil pointers during create/update.
 - Use `gremlinSubTraversal:"alias"` for subtraversal projections; the alias must match

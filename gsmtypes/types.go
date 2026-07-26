@@ -26,16 +26,19 @@ func (v *Vertex) SetVertexLastModified(t time.Time) { v.LastModified = t }
 func (v *Vertex) SetVertexCreatedAt(t time.Time)    { v.CreatedAt = t }
 
 type Edge struct {
-	ID           any    `json:"id"            gremlin:"id"`
-	LastModified string `json:"last_modified" gremlin:"last_modified"`
-	CreatedAt    int64  `json:"created_at"    gremlin:"created_at"`
+	ID           any       `json:"id"            gremlin:"id"`
+	LastModified time.Time `json:"last_modified" gremlin:"last_modified"`
+	CreatedAt    time.Time `json:"created_at"    gremlin:"created_at"`
 }
 
-func (e Edge) GetEdgeID() any              { return e.ID }
-func (e Edge) GetEdgeLastModified() string { return e.LastModified }
-func (e Edge) GetEdgeCreatedAt() int64     { return e.CreatedAt }
-func (e Edge) Label() string {
+func (e *Edge) GetEdgeID() any                 { return e.ID }
+func (e *Edge) GetEdgeLastModified() time.Time { return e.LastModified }
+func (e *Edge) GetEdgeCreatedAt() time.Time    { return e.CreatedAt }
+func (e *Edge) Label() string {
 	// Default implementation returns empty string
 	// The driver will use struct name normalization when Label() returns empty
 	return ""
 }
+func (e *Edge) SetEdgeID(id any)                { e.ID = id }
+func (e *Edge) SetEdgeLastModified(t time.Time) { e.LastModified = t }
+func (e *Edge) SetEdgeCreatedAt(t time.Time)    { e.CreatedAt = t }

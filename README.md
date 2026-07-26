@@ -8,6 +8,7 @@ A type-safe, chainable query builder for Gremlin graph databases in Go. This ORM
 - [Setup](#setup)
   - [Custom Labels](#custom-labels)
   - [Customizing Last-Modified Tracking](#customizing-last-modified-tracking)
+- [Working with Edges](#working-with-edges)
 - [Database Configuration](#database-configuration)
   - [Database Driver Types](#database-driver-types)
   - [Custom ID Generator](#custom-id-generator)
@@ -41,7 +42,7 @@ A type-safe, chainable query builder for Gremlin graph databases in Go. This ORM
 
 ## Overview
 
-The query builder uses Go generics to provide type-safe operations on vertex types that implement the `VertexType` interface. All functions are chainable, allowing for fluent query construction.
+The query builder uses Go generics to provide type-safe operations on vertex types that implement the `VertexType` interface and edge types that implement the `EdgeType` interface. All functions are chainable, allowing for fluent query construction.
 
 ## Requirements
 
@@ -253,9 +254,87 @@ if err != nil {
 - Custom IDs must be unique within the graph
 - The ID type can be string, int, or any type supported by your graph database
 
+## Working with Edges
+
+Edges are first-class models, just like vertices. Define an edge struct by embedding `gsmtypes.Edge` anonymously and tagging properties with `gremlin` tags. By default the edge label is the struct name converted to lower snake case (`SubscribesTo` becomes `subscribes_to`); implement `Label() string` to override it, exactly like vertices.
+
+```go
+type SubscribesTo struct {
+    gsmtypes.Edge                      // Anonymous embedding required
+    Weight float64 `gremlin:"weight"`
+    Notes  string  `gremlin:"notes,omitempty"`
+}
+```
+
+### Creating Edges
+
+`CreateEdge` creates an edge between two vertices. The `from` and `to` endpoints can be GSM vertex structs (their IDs are used) or raw vertex IDs:
+
+```go
+person := Person{Name: "alice"}
+_ = GSM.Create(db, &person)
+topic := Topic{Title: "graphs"}
+_ = GSM.Create(db, &topic)
+
+sub := SubscribesTo{Weight: 1.5}
+err := GSM.CreateEdge(db, &sub, &person, &topic)   // person -[subscribes_to]-> topic
+// or with raw IDs:
+err = GSM.CreateEdge(db, &sub, person.ID, topic.ID)
+```
+
+Like vertex `Create`, `CreateEdge`:
+- Stamps `created_at` and `last_modified` (rename or disable last-modified tracking via `gsmtypes.LastModifiedPropertyType`)
+- Runs `BeforeCreate`/`AfterCreate` hooks
+- Writes the generated edge ID back to the struct (`sub.ID`)
+- Uses the driver's `IDGenerator` for custom edge IDs when configured
+
+### Saving Edges
+
+`SaveEdge` creates the edge when its ID is unset, otherwise it updates the existing edge's properties in place:
+
+```go
+sub.Weight = 3.0
+err := GSM.SaveEdge(db, &sub, &person, &topic) // updates the existing edge
+```
+
+Gremlin cannot re-point an existing edge, so the endpoints are only used on create; updates match the edge by ID and label and leave its endpoints untouched. To move a relationship, delete the edge and create a new one.
+
+### Querying Edges
+
+The full query builder works on edge types. Because the struct embeds `gsmtypes.Edge`, `Model` automatically traverses edges (`g.E()`) instead of vertices:
+
+```go
+// Find, Take, ID, Count
+heavy, err := GSM.Model[SubscribesTo](db).
+    Where("weight", comparator.GT, 2.0).
+    OrderBy("weight", GSM.Desc).
+    Find()
+
+sub, err := GSM.Model[SubscribesTo](db).ID(edgeID)
+
+// Targeted property updates and removals
+err = GSM.Model[SubscribesTo](db).
+    Where("weight", comparator.GT, 2.0).
+    Updates(map[string]any{"notes": "heavy subscription"})
+
+err = GSM.Model[SubscribesTo](db).RemoveProperty("notes")
+
+// Delete matching edges
+err = GSM.Model[SubscribesTo](db).
+    Where("weight", comparator.LT, 0.1).
+    Delete()
+```
+
+To find the vertices an edge connects, use a raw traversal: `db.G().E(edgeID).OutV()` / `db.G().E(edgeID).InV()`.
+
+**Important notes:**
+- Edge properties are single-valued in Gremlin, so no cardinality is applied when writing them. Slice fields are written as a single list value, which is backend-dependent (TinkerGraph accepts lists; Neptune does not)
+- `Preload` is not supported on edge queries; preload related vertices from a vertex query instead
+- `last_modified` is refreshed by `SaveEdge`, `Update`/`Updates`, and `RemoveProperty`/`RemoveProperties`, the same as vertices
+
 ## Hooks
 
-Implement hook interfaces on your vertex types to run logic before/after create or update.
+Implement hook interfaces on your vertex or edge types to run logic before/after create or update.
 Hooks receive the `*GremlinDriver` used for the operation and can abort by returning an error.
 
 **Available hooks:**
@@ -839,7 +918,7 @@ person, err := GSM.Model[Person](db).PreloadDedup("Topics.Posts").Take()
 - Preloading an unknown field or a field without a `gremlinEdge` tag (at any level of a nested path) returns an error from the query execution method
 - Only relationships named in preload paths are loaded; relationships declared on related structs are not loaded implicitly
 - Each nested level fans out the traversal and duplicates shared vertices per parent, so keep paths reasonably shallow on dense graphs
-- Edges themselves must already exist; create them with a raw traversal, e.g. `db.G().V(personID).AddE("subscribed").To(gremlingo.T__.V(topicID)).Iterate()`
+- Edges themselves must already exist; create them with [`CreateEdge`](#creating-edges), e.g. `GSM.CreateEdge(db, &Subscribed{}, &person, &topic)`
 
 ### Scopes
 

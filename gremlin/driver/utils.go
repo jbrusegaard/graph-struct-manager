@@ -258,7 +258,9 @@ func newStructFromGremlinMap(elemType reflect.Type, value any) (reflect.Value, b
 	return structPointer.Elem(), true
 }
 
-func getLabelFromVertex(value any) string {
+// getLabelFromValue resolves the label for a vertex or edge model value,
+// preferring a custom Label() implementation over the snake-cased struct name.
+func getLabelFromValue(value any) string {
 	if value == nil {
 		return ""
 	}
@@ -273,20 +275,6 @@ func getLabelFromVertex(value any) string {
 	// covers the pointer-receiver case and the snake-case fallback.
 	return schemaFor(reflect.TypeOf(value)).zeroLabel
 }
-
-// func getLabelFromEdge(value gsmtypes.EdgeType) string {
-// 	label := value.Label()
-// 	if label == "" {
-// 		// Get the concrete type from the interface
-// 		concreteType := reflect.ValueOf(value).Type()
-// 		// Handle pointer types
-// 		if concreteType.Kind() == reflect.Ptr {
-// 			concreteType = concreteType.Elem()
-// 		}
-// 		return stringy.New(concreteType.Name()).SnakeCase().ToLower()
-// 	}
-// 	return label
-// }
 
 // structToMap converts a struct to a map[string]any and returns the label and the map
 // the label is determined by calling Label() method if available, otherwise the name of the struct converted to snake case
