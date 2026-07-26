@@ -28,10 +28,14 @@ A type-safe, chainable query builder for Gremlin graph databases in Go. This ORM
   - [Offset](#offset)
   - [OrderBy](#orderby)
   - [Find](#find)
-  - [First](#first)
+  - [Take](#take)
   - [Count](#count)
   - [Id](#id)
   - [Delete](#delete)
+  - [Update](#update)
+  - [Updates](#updates)
+  - [RemoveProperty](#removeproperty)
+  - [RemoveProperties](#removeproperties)
 - [Complete Examples](#complete-examples)
 - [Comparison Operators](#comparison-operators)
 
@@ -698,20 +702,20 @@ type User struct {
 user, err := GSM.Model[User](db).
     Where("email", comparator.EQ, "john@example.com").
     AddSubTraversal("friend_count", gremlingo.T__.Out("friends").Count()).
-    First()
+    Take()
 
 // Get user with list of friend names
 user, err := GSM.Model[User](db).
     Where("email", comparator.EQ, "john@example.com").
     AddSubTraversal("friends", gremlingo.T__.Out("friends").Values("name").Fold()).
-    First()
+    Take()
 
 // Multiple subtraversals for different fields
 user, err := GSM.Model[User](db).
     Where("email", comparator.EQ, "john@example.com").
     AddSubTraversal("friend_count", gremlingo.T__.Out("friends").Count()).
     AddSubTraversal("friends", gremlingo.T__.Out("friends").Values("name").Fold()).
-    First()
+    Take()
 
 // Complex subtraversal - get average age of friends
 type UserWithStats struct {
@@ -726,7 +730,7 @@ user, err := GSM.Model[UserWithStats](db).
         gremlingo.T__.Out("friends").
             Values("age").
             Mean()).
-    First()
+    Take()
 ```
 
 **Important notes:**
@@ -734,7 +738,7 @@ user, err := GSM.Model[UserWithStats](db).
 - Subtraversals are executed as part of the main query using Gremlin's `Project` step
 - The result type from the subtraversal must be compatible with the struct field type
 - You can add multiple subtraversals to populate different fields in a single query
-- Subtraversals work with `Find()`, `First()`, and other query execution methods
+- Subtraversals work with `Find()`, `Take()`, and other query execution methods
 
 ### Preload
 
@@ -1130,13 +1134,13 @@ developers, err := GSM.Model[TestVertex](db).
     Find()
 ```
 
-### First
+### Take
 
 Executes the query and returns the first result.
 
 **Signature:**
 ```go
-func (q *Query[T]) First() (T, error)
+func (q *Query[T]) Take() (T, error)
 ```
 
 **Examples:**
@@ -1144,7 +1148,7 @@ func (q *Query[T]) First() (T, error)
 // Get first user by name
 user, err := GSM.Model[TestVertex](db).
     Where("name", comparator.EQ, "John").
-    First()
+    Take()
 if err != nil {
     return err
 }
@@ -1152,17 +1156,17 @@ if err != nil {
 // Get oldest user
 oldestUser, err := GSM.Model[TestVertex](db).
     OrderBy("age", driver.Desc).
-    First()
+    Take()
 
 // Get user with specific email
 user, err := GSM.Model[TestVertex](db).
     Where("email", comparator.EQ, "john@example.com").
-    First()
+    Take()
 
 // Handle not found
 user, err := GSM.Model[TestVertex](db).
     Where("id", comparator.EQ, nonExistentId).
-    First()
+    Take()
 if err != nil {
     if err.Error() == "no more results" {
         // Handle not found case
@@ -1349,6 +1353,64 @@ err := GSM.Model[TestVertex](db).
     })
 ```
 
+### RemoveProperty
+
+Removes a single property entirely from all vertices matching the query conditions. Unlike
+`Update(propertyName, nil)`, which would write a null/zero value, `RemoveProperty` drops the
+property key from the vertex so it no longer appears at all.
+
+**Signature:**
+```go
+func (q *Query[T]) RemoveProperty(propertyName string) error
+```
+
+**Examples:**
+```go
+// Drop the "age" property from all matching users
+err := GSM.Model[TestVertex](db).
+    Where("email", comparator.EQ, "user@example.com").
+    RemoveProperty("age")
+
+// Drop a slice property entirely (all elements are removed)
+err := GSM.Model[TestVertex](db).
+    Where("name", comparator.EQ, "second").
+    RemoveProperty("tags")
+```
+
+### RemoveProperties
+
+Removes one or more properties in a single traversal from all vertices matching the query
+conditions. Only the named properties are removed; every other property on the vertex is left
+untouched. Names must match the `gremlin` struct tags on the model, and `last_modified` is
+refreshed automatically (models can rename or disable this via
+[`gsmtypes.LastModifiedPropertyType`](#customizing-last-modified-tracking)).
+
+The whole removal is validated up front: if any name doesn't match a gremlin tag (or is `id`),
+an error is returned and nothing is removed.
+
+**Signature:**
+```go
+func (q *Query[T]) RemoveProperties(propertyNames ...string) error
+```
+
+**Examples:**
+```go
+// Remove multiple properties, leaving the rest of the vertex untouched
+err := GSM.Model[TestVertex](db).
+    Where("email", comparator.EQ, "user@example.com").
+    RemoveProperties("age", "tags")
+
+// Targeted removal by ID
+err := GSM.Model[TestVertex](db).
+    IDs("user-123").
+    RemoveProperties("metadata")
+```
+
+**Important notes:**
+- `RemoveProperty`/`RemoveProperties` cannot remove `id`
+- Removing an unknown property (not backed by a `gremlin` tag on the model) returns an error and aborts the whole call, so a bad name can't leave a partial removal behind
+- Passing no names to `RemoveProperties()` is a no-op
+
 ## Complete Examples
 
 ### Basic CRUD Operations
@@ -1378,7 +1440,7 @@ func main() {
     // Read - Find user by email
     user, err := GSM.Model[TestVertex](db).
         Where("email", comparator.EQ, "alice@example.com").
-        First()
+        Take()
     if err != nil {
         log.Fatal(err)
     }
@@ -1475,7 +1537,7 @@ func handleQueryErrors(db *GSM.GremlinDriver) {
     // Handle "not found" gracefully
     user, err := GSM.Model[TestVertex](db).
         Where("id", comparator.EQ, "non-existent-id").
-        First()
+        Take()
 
     if err != nil {
         if strings.Contains(err.Error(), "no more results") {

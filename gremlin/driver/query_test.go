@@ -505,6 +505,149 @@ func TestQuery(t *testing.T) {
 		},
 	)
 	t.Run(
+		"TestRemovePropertySingle", func(t *testing.T) {
+			t.Cleanup(cleanDB)
+			err = seedData(db, seededData)
+			if err != nil {
+				t.Error(err)
+			}
+			preModel, err := driver.Model[testVertexForUtils](db).Where("name", comparator.EQ, "first").Take()
+			if err != nil {
+				t.Error(err)
+			}
+			err = driver.Model[testVertexForUtils](db).Where("name", comparator.EQ, "first").
+				RemoveProperty("sort")
+			if err != nil {
+				t.Error("error removing property", err)
+			}
+			model, err := driver.Model[testVertexForUtils](db).Where("name", comparator.EQ, "first").Take()
+			if err != nil {
+				t.Error(err)
+			}
+			if model.Sort != 0 {
+				t.Errorf("Expected sort to be zero value after removal, got %d", model.Sort)
+			}
+			if _, err := db.G().V(model.ID).Values("sort").Next(); err == nil {
+				t.Error("Expected sort property to be dropped entirely, not just zeroed")
+			}
+			if preModel.LastModified.Equal(model.LastModified) {
+				t.Error("Expected last modified time to be updated")
+			}
+		},
+	)
+	t.Run(
+		"TestRemovePropertiesMultiple", func(t *testing.T) {
+			t.Cleanup(cleanDB)
+			err = seedData(db, seededData)
+			if err != nil {
+				t.Error(err)
+			}
+			err = driver.Model[testVertexForUtils](db).Where("name", comparator.EQ, "second").
+				RemoveProperties("sort", "listTest")
+			if err != nil {
+				t.Error("error removing properties", err)
+			}
+			model, err := driver.Model[testVertexForUtils](db).Where("name", comparator.EQ, "second").Take()
+			if err != nil {
+				t.Error(err)
+			}
+			if model.Sort != 0 {
+				t.Errorf("Expected sort to be zero value after removal, got %d", model.Sort)
+			}
+			if model.ListTest != nil {
+				t.Errorf("Expected listTest to be nil after removal, got %v", model.ListTest)
+			}
+			if _, err := db.G().V(model.ID).Values("sort").Next(); err == nil {
+				t.Error("Expected sort property to be dropped entirely")
+			}
+			if _, err := db.G().V(model.ID).Values("listTest").Next(); err == nil {
+				t.Error("Expected listTest property to be dropped entirely")
+			}
+		},
+	)
+	t.Run(
+		"TestRemovePropertiesDuplicateNames", func(t *testing.T) {
+			t.Cleanup(cleanDB)
+			err = seedData(db, seededData)
+			if err != nil {
+				t.Error(err)
+			}
+			err = driver.Model[testVertexForUtils](db).Where("name", comparator.EQ, "third").
+				RemoveProperties("sort", "sort")
+			if err != nil {
+				t.Error("error removing duplicate property names", err)
+			}
+			model, err := driver.Model[testVertexForUtils](db).Where("name", comparator.EQ, "third").Take()
+			if err != nil {
+				t.Error(err)
+			}
+			if model.Sort != 0 {
+				t.Errorf("Expected sort to be zero value after removal, got %d", model.Sort)
+			}
+		},
+	)
+	t.Run(
+		"TestRemovePropertyBadInput", func(t *testing.T) {
+			t.Cleanup(cleanDB)
+			err = seedData(db, seededData)
+			if err != nil {
+				t.Error(err)
+			}
+			err = driver.Model[testVertexForUtils](db).RemoveProperty("badField")
+			if err == nil {
+				t.Error("Expected error for unknown property")
+			}
+		},
+	)
+	t.Run(
+		"TestRemovePropertiesBadInputAborts", func(t *testing.T) {
+			t.Cleanup(cleanDB)
+			err = seedData(db, seededData)
+			if err != nil {
+				t.Error(err)
+			}
+			err = driver.Model[testVertexForUtils](db).Where("name", comparator.EQ, "first").
+				RemoveProperties("sort", "badField")
+			if err == nil {
+				t.Error("Expected error for unknown property")
+			}
+			// The bad key must abort the whole removal, including valid keys.
+			model, err := driver.Model[testVertexForUtils](db).Where("name", comparator.EQ, "first").Take()
+			if err != nil {
+				t.Error(err)
+			}
+			if model.Sort == 0 {
+				t.Error("Expected sort to remain untouched when removal is aborted by a bad key")
+			}
+		},
+	)
+	t.Run(
+		"TestRemovePropertiesRejectsID", func(t *testing.T) {
+			t.Cleanup(cleanDB)
+			err = seedData(db, seededData)
+			if err != nil {
+				t.Error(err)
+			}
+			err = driver.Model[testVertexForUtils](db).RemoveProperties("id")
+			if err == nil {
+				t.Error("Expected error when removing id")
+			}
+		},
+	)
+	t.Run(
+		"TestRemovePropertiesEmpty", func(t *testing.T) {
+			t.Cleanup(cleanDB)
+			err = seedData(db, seededData)
+			if err != nil {
+				t.Error(err)
+			}
+			err = driver.Model[testVertexForUtils](db).RemoveProperties()
+			if err != nil {
+				t.Errorf("Expected no error for empty removal, got %v", err)
+			}
+		},
+	)
+	t.Run(
 		"TestQueryIDs", func(t *testing.T) {
 			t.Cleanup(cleanDB)
 			err = seedData(db, seededData)
