@@ -57,3 +57,9 @@ func ValidateStructPointerWithAnonymousVertexForTest(value any) error {
 func LastModifiedPropertyForTest[T any]() string {
 	return schemaFor(reflect.TypeFor[T]()).lastModifiedProperty
 }
+
+// MaybeSerializeValueForTest exposes the value serialization used by
+// Where/Update/Updates for external tests.
+func MaybeSerializeValueForTest(value any) (any, bool, error) {
+	return maybeSerializeValue(value)
+}

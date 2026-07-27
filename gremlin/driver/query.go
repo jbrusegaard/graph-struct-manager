@@ -172,12 +172,19 @@ func (q *Query[T]) AddSubTraversal(
 	return q
 }
 
-// Where adds a condition to the query
+// Where adds a condition to the query.
+// Values implementing gsmtypes.SerializerType are serialized first so
+// conditions match the stored representation of custom-serialized properties.
 func (q *Query[T]) Where(field string, operator comparator.Comparator, value any) *Query[T] {
+	serialized, _, err := maybeSerializeValue(value)
+	if err != nil {
+		q.err = fmt.Errorf("where %s: serialize value: %w", field, err)
+		return q
+	}
 	queryCondition := QueryCondition{
 		field:    field,
 		operator: operator,
-		value:    value,
+		value:    serialized,
 	}
 	q.writeDebugString(queryCondition.String())
 
@@ -552,6 +559,8 @@ func (q *Query[T]) Update(propertyName string, value any) error {
 // every other property on the vertex is left untouched. Map keys must match
 // the gremlin struct tags on T.
 // NOTE: Slices will be updated as Cardinality.Set
+// NOTE: values implementing gsmtypes.SerializerType are serialized before
+// being written
 // NOTE: the model's last-modified property (last_modified by default) is
 // refreshed as part of the update; models can rename or disable this via
 // gsmtypes.LastModifiedPropertyType
@@ -576,8 +585,12 @@ func (q *Query[T]) Updates(properties map[string]any) error {
 	slices.Sort(keys)
 
 	// Validate every property before touching the database so a bad key
-	// can't leave a partial update behind.
+	// can't leave a partial update behind. Values implementing
+	// gsmtypes.SerializerType are serialized here, and cardinality follows
+	// the serialized value (e.g. a map serialized to a string is written as
+	// a single-valued property) rather than the declared field type.
 	fieldTypes := make(map[string]reflect.Type, len(properties))
+	values := make(map[string]any, len(properties))
 	for _, key := range keys {
 		if key == "id" {
 			return errors.New("cannot update vertex id")
@@ -586,7 +599,19 @@ func (q *Query[T]) Updates(properties map[string]any) error {
 		if !ok {
 			return fmt.Errorf("propertyName not found in gremlin struct tags: %s", key)
 		}
-		fieldTypes[key] = rt.FieldByIndex(field.index).Type
+		value, serialized, err := maybeSerializeValue(properties[key])
+		if err != nil {
+			return fmt.Errorf("serialize property %q: %w", key, err)
+		}
+		values[key] = value
+		switch {
+		case serialized && value != nil:
+			fieldTypes[key] = reflect.TypeOf(value)
+		case serialized:
+			fieldTypes[key] = reflect.TypeFor[any]()
+		default:
+			fieldTypes[key] = rt.FieldByIndex(field.index).Type
+		}
 	}
 
 	query := q.BuildQuery()
@@ -594,7 +619,7 @@ func (q *Query[T]) Updates(properties map[string]any) error {
 		query = q.stampLastModified(query, lastModifiedProperty)
 	}
 	for _, key := range keys {
-		query = q.applyPropertyUpdate(query, key, fieldTypes[key], properties[key])
+		query = q.applyPropertyUpdate(query, key, fieldTypes[key], values[key])
 	}
 	errChan := query.Iterate()
 	return <-errChan

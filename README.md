@@ -6,6 +6,7 @@ A type-safe, chainable query builder for Gremlin graph databases in Go. This ORM
 
 - [Overview](#overview)
 - [Setup](#setup)
+  - [Custom Property Serialization](#custom-property-serialization)
   - [Custom Labels](#custom-labels)
   - [Customizing Last-Modified Tracking](#customizing-last-modified-tracking)
 - [Working with Edges](#working-with-edges)
@@ -133,6 +134,81 @@ err := GSM.Create(db, &newUser)
 // Only "name" and "email" properties will be created in the graph
 // (assuming other fields have omitempty)
 ```
+
+### Custom Property Serialization
+
+Gremlin property values must be primitives, so types it cannot store natively (maps, nested
+structs, ...) need to be converted before they are written. Implement
+`gsmtypes.SerializerType` and `gsmtypes.DeserializerType` on a field's type to control how its
+value is stored and loaded:
+
+```go
+type SerializerType interface {
+    SerializeGremlinValue() (any, error)
+}
+
+type DeserializerType interface {
+    DeserializeGremlinValue(value any) error
+}
+```
+
+For example, a map alias can be persisted as a JSON string and converted back automatically
+when results are unpacked:
+
+```go
+type Attributes map[string]string
+
+func (a Attributes) SerializeGremlinValue() (any, error) {
+    encoded, err := json.Marshal(a)
+    if err != nil {
+        return nil, err
+    }
+    return string(encoded), nil
+}
+
+// DeserializeGremlinValue must use a pointer receiver so it can populate the value.
+func (a *Attributes) DeserializeGremlinValue(value any) error {
+    encoded, ok := value.(string)
+    if !ok {
+        return fmt.Errorf("expected string, got %T", value)
+    }
+    return json.Unmarshal([]byte(encoded), a)
+}
+
+type Server struct {
+    gsmtypes.Vertex
+    Name       string     `gremlin:"name"`
+    Attributes Attributes `gremlin:"attributes"`
+}
+
+server := Server{
+    Name:       "web-1",
+    Attributes: Attributes{"env": "prod", "region": "us-east-1"},
+}
+err := driver.Create(db, &server)      // attributes stored as `{"env":"prod","region":"us-east-1"}`
+
+loaded, err := driver.Model[Server](db).ID(server.ID)
+// loaded.Attributes == Attributes{"env": "prod", "region": "us-east-1"}
+```
+
+**Where serialization applies:**
+- `Create` / `Save` / `SaveEdge` / `CreateEdge`: tagged fields whose type implements
+  `SerializerType` are serialized before being written
+- `Query.Update` / `Query.Updates`: values implementing `SerializerType` are serialized before
+  being written
+- `Query.Where`: condition values implementing `SerializerType` are serialized so equality
+  checks match the stored representation
+- `Find` / `Take` / `ID` / `Preload`: stored values are passed to `DeserializeGremlinValue` on
+  fields whose type implements `DeserializerType`
+
+**Notes:**
+- Both value and pointer receivers work for `SerializeGremlinValue`; `DeserializeGremlinValue`
+  must use a pointer receiver so it can populate the field
+- Pointer fields (e.g. `*Attributes`) are supported: nil pointers are skipped on write and the
+  field is allocated automatically on read
+- `omitempty` is evaluated against the original value, before serialization
+- Serialization and deserialization errors abort the operation and are returned with the
+  property name wrapped in the error
 
 ### Custom Labels
 
