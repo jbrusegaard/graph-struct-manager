@@ -138,13 +138,13 @@ err := GSM.Create(db, &newUser)
 ### Custom Property Serialization
 
 Gremlin property values must be primitives, so types it cannot store natively (maps, nested
-structs, ...) need to be converted before they are written. Implement
+structs, ...) need to be converted to a string before they are written. Implement
 `gsmtypes.SerializerType` and `gsmtypes.DeserializerType` on a field's type to control how its
 value is stored and loaded:
 
 ```go
 type SerializerType interface {
-    SerializeGremlinValue() (any, error)
+    SerializeGremlinValue() (string, error)
 }
 
 type DeserializerType interface {
@@ -158,10 +158,10 @@ when results are unpacked:
 ```go
 type Attributes map[string]string
 
-func (a Attributes) SerializeGremlinValue() (any, error) {
+func (a Attributes) SerializeGremlinValue() (string, error) {
     encoded, err := json.Marshal(a)
     if err != nil {
-        return nil, err
+        return "", err
     }
     return string(encoded), nil
 }

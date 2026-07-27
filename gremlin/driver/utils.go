@@ -158,10 +158,10 @@ func unloadSchemaFields(
 }
 
 // serializeGremlinValue converts a field value whose type implements
-// gsmtypes.SerializerType into its gremlin representation. Non-addressable
-// values with pointer-receiver implementations are copied so the method can
-// be invoked.
-func serializeGremlinValue(rv reflect.Value) (any, error) {
+// gsmtypes.SerializerType into its string gremlin representation.
+// Non-addressable values with pointer-receiver implementations are copied so
+// the method can be invoked.
+func serializeGremlinValue(rv reflect.Value) (string, error) {
 	if serializer, ok := rv.Interface().(gsmtypes.SerializerType); ok {
 		return serializer.SerializeGremlinValue()
 	}
@@ -174,7 +174,7 @@ func serializeGremlinValue(rv reflect.Value) (any, error) {
 	ptr.Elem().Set(rv)
 	serializer, ok := ptr.Interface().(gsmtypes.SerializerType)
 	if !ok {
-		return nil, fmt.Errorf("type %s does not implement gsmtypes.SerializerType", rv.Type())
+		return "", fmt.Errorf("type %s does not implement gsmtypes.SerializerType", rv.Type())
 	}
 	return serializer.SerializeGremlinValue()
 }

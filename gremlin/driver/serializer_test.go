@@ -18,10 +18,10 @@ import (
 // custom serializer interfaces (gremlin has no native map property support).
 type testAttributes map[string]string
 
-func (a testAttributes) SerializeGremlinValue() (any, error) {
+func (a testAttributes) SerializeGremlinValue() (string, error) {
 	encoded, err := json.Marshal(a)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	return string(encoded), nil
 }
@@ -40,7 +40,7 @@ type testPointerSerializer struct {
 	Value string
 }
 
-func (p *testPointerSerializer) SerializeGremlinValue() (any, error) {
+func (p *testPointerSerializer) SerializeGremlinValue() (string, error) {
 	return "ptr:" + p.Value, nil
 }
 
@@ -57,8 +57,8 @@ var errSerializerBoom = errors.New("boom")
 
 type testFailingSerializer struct{}
 
-func (testFailingSerializer) SerializeGremlinValue() (any, error) {
-	return nil, errSerializerBoom
+func (testFailingSerializer) SerializeGremlinValue() (string, error) {
+	return "", errSerializerBoom
 }
 
 func (*testFailingSerializer) DeserializeGremlinValue(any) error {

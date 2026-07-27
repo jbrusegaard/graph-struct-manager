@@ -52,19 +52,18 @@ type UnmappedPropertiesType interface {
 // SerializerType lets a field type control how its value is persisted as a
 // gremlin property. Gremlin property values must be primitives, so types it
 // cannot store natively (maps, nested structs, ...) can implement
-// SerializerType to convert themselves into a supported representation
-// (typically a string) before being written.
+// SerializerType to convert themselves into a string before being written.
 //
 // SerializeGremlinValue is called on tagged fields whose type implements
 // this interface (value or pointer receiver) whenever the model is created,
 // saved, or updated, and on values passed to Query.Where,
-// Query.Update, and Query.Updates. The returned value is written as the
+// Query.Update, and Query.Updates. The returned string is written as the
 // property value in place of the original.
 //
 // Implement DeserializerType on the same type to convert the stored value
 // back when results are loaded.
 type SerializerType interface {
-	SerializeGremlinValue() (any, error)
+	SerializeGremlinValue() (string, error)
 }
 
 // DeserializerType lets a field type control how a stored gremlin property

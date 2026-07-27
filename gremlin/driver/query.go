@@ -604,12 +604,10 @@ func (q *Query[T]) Updates(properties map[string]any) error {
 			return fmt.Errorf("serialize property %q: %w", key, err)
 		}
 		values[key] = value
-		switch {
-		case serialized && value != nil:
-			fieldTypes[key] = reflect.TypeOf(value)
-		case serialized:
-			fieldTypes[key] = reflect.TypeFor[any]()
-		default:
+		if serialized {
+			// Serialized values are always strings (SerializerType contract).
+			fieldTypes[key] = reflect.TypeFor[string]()
+		} else {
 			fieldTypes[key] = rt.FieldByIndex(field.index).Type
 		}
 	}
