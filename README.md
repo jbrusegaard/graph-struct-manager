@@ -325,6 +325,30 @@ err = GSM.Model[SubscribesTo](db).
     Delete()
 ```
 
+### Querying a Vertex's Edges
+
+Use `From` and `To` to query the edges attached to a specific vertex. Both accept a GSM vertex struct (its ID is used) or a raw vertex ID, and both start the traversal at that vertex (`g.V(id).OutE()` / `g.V(id).InE()`) instead of scanning every edge, so they are also the fast way to run these queries:
+
+```go
+// All subscriptions leaving a person
+subs, err := GSM.Model[SubscribesTo](db).From(&person).Find()
+
+// All subscriptions arriving at a topic
+subs, err = GSM.Model[SubscribesTo](db).To(&topic).Find()
+
+// The edge(s) between a specific pair of vertices
+sub, err := GSM.Model[SubscribesTo](db).From(&person).To(&topic).Take()
+
+// Chain with the rest of the query builder as usual
+err = GSM.Model[SubscribesTo](db).From(&person).To(&topic).Delete() // unsubscribe
+heavy, err := GSM.Model[SubscribesTo](db).
+    From(&person).
+    Where("weight", comparator.GT, 2.0).
+    Find()
+```
+
+`From`/`To` are only valid on edge queries and cannot be combined with `PreQuery` (for traversal starts these steps don't cover, build the start yourself with `PreQuery`, e.g. `PreQuery(db.G().V(id).BothE())` for edges in either direction).
+
 To find the vertices an edge connects, use a raw traversal: `db.G().E(edgeID).OutV()` / `db.G().E(edgeID).InV()`.
 
 **Important notes:**

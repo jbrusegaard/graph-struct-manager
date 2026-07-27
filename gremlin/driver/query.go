@@ -37,9 +37,11 @@ type Query[T any] struct {
 	debugString    *strings.Builder
 	dedup          bool
 	err            error
+	fromVertexID   any
 	ids            []any
 	isEdgeQuery    bool
 	labels         []any
+	toVertexID     any
 	limit          *int
 	offset         *int
 	orderBy        *OrderCondition
@@ -250,6 +252,10 @@ func (q *Query[T]) PreQuery(traversal *gremlingo.GraphTraversal) *Query[T] {
 	if traversal == nil {
 		return q
 	}
+	if q.fromVertexID != nil || q.toVertexID != nil {
+		q.err = errors.New("prequery: cannot be combined with From/To")
+		return q
+	}
 	q.preTraversal = traversal
 	q.resetDebugStringForPreQuery()
 	return q
@@ -273,6 +279,49 @@ func (q *Query[T]) IDs(id ...any) *Query[T] {
 		q.writeDebugString(")")
 	}
 	q.ids = append(q.ids, id...)
+	return q
+}
+
+// From constrains an edge query to edges leaving the given vertex. The
+// vertex may be a GSM vertex struct (its ID is used) or a raw vertex ID.
+// The traversal starts at the vertex (g.V(id).OutE()) instead of scanning
+// all edges, so this is also the fast way to query a vertex's edges.
+// Only supported on edge queries and cannot be combined with PreQuery.
+//
+//	subs, err := driver.Model[SubscribesTo](db).From(&person).Find()
+func (q *Query[T]) From(vertex any) *Query[T] {
+	return q.setEndpoint(vertex, &q.fromVertexID, "From")
+}
+
+// To constrains an edge query to edges arriving at the given vertex. The
+// vertex may be a GSM vertex struct (its ID is used) or a raw vertex ID.
+// The traversal starts at the vertex (g.V(id).InE()) instead of scanning
+// all edges, so this is also the fast way to query a vertex's edges.
+// Combine with From to match edges between a specific pair of vertices.
+// Only supported on edge queries and cannot be combined with PreQuery.
+//
+//	subs, err := driver.Model[SubscribesTo](db).From(&person).To(&topic).Find()
+func (q *Query[T]) To(vertex any) *Query[T] {
+	return q.setEndpoint(vertex, &q.toVertexID, "To")
+}
+
+// setEndpoint validates and stores a From/To endpoint constraint.
+func (q *Query[T]) setEndpoint(vertex any, target *any, step string) *Query[T] {
+	if !q.isEdgeQuery {
+		q.err = fmt.Errorf("%s: only supported on edge queries", strings.ToLower(step))
+		return q
+	}
+	if q.preTraversal != nil {
+		q.err = fmt.Errorf("%s: cannot be combined with PreQuery", strings.ToLower(step))
+		return q
+	}
+	id, err := resolveEndpointID(vertex)
+	if err != nil {
+		q.err = fmt.Errorf("%s vertex: %w", strings.ToLower(step), err)
+		return q
+	}
+	q.writeDebugString(fmt.Sprintf(".%s(%v)", step, id))
+	*target = id
 	return q
 }
 
@@ -433,6 +482,9 @@ func (q *Query[T]) Take() (T, error) {
 
 // Count returns the number of matching results
 func (q *Query[T]) Count() (int, error) {
+	if q.err != nil {
+		return 0, q.err
+	}
 	q.writeDebugString(".Count()")
 	query := q.BuildQuery().Count()
 	result, defaultVal, err := nextWithDefaultValue(query, 0)
@@ -451,6 +503,9 @@ func (q *Query[T]) Count() (int, error) {
 
 // Delete deletes all matching results
 func (q *Query[T]) Delete() error {
+	if q.err != nil {
+		return q.err
+	}
 	q.writeDebugString(".Drop().Iterate()")
 	query := q.BuildQuery()
 	err := query.Drop().Iterate()
@@ -714,6 +769,11 @@ func (q *Query[T]) buildBaseQuery() *gremlingo.GraphTraversal {
 		if len(q.ids) > 0 {
 			query = query.HasId(q.ids...)
 		}
+	case q.fromVertexID != nil || q.toVertexID != nil:
+		query = q.startEndpointTraversal()
+		if len(q.ids) > 0 {
+			query = query.HasId(q.ids...)
+		}
 	case len(q.ids) > 0:
 		query = q.startTraversal(q.ids...)
 	default:
@@ -739,6 +799,23 @@ func (q *Query[T]) startTraversal(ids ...any) *gremlingo.GraphTraversal {
 		return q.db.g.E(ids...)
 	}
 	return q.db.g.V(ids...)
+}
+
+// startEndpointTraversal begins an edge traversal at a From/To endpoint
+// vertex so the query walks the vertex's adjacency list instead of scanning
+// every edge. With both endpoints set, edges leaving the From vertex are
+// filtered to those arriving at the To vertex.
+func (q *Query[T]) startEndpointTraversal() *gremlingo.GraphTraversal {
+	switch {
+	case q.fromVertexID != nil && q.toVertexID != nil:
+		return q.db.g.V(q.fromVertexID).
+			OutE().
+			Where(anonymousTraversal.InV().HasId(q.toVertexID))
+	case q.fromVertexID != nil:
+		return q.db.g.V(q.fromVertexID).OutE()
+	default:
+		return q.db.g.V(q.toVertexID).InE()
+	}
 }
 
 func (q *Query[T]) doOrderSkipRange(query *gremlingo.GraphTraversal) *gremlingo.GraphTraversal {

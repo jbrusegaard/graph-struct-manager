@@ -548,6 +548,159 @@ func TestCreateEdgeCustomIDGenerator(t *testing.T) {
 	}
 }
 
+func TestEdgeQueryFromTo(t *testing.T) {
+	db := openEdgeTestDB(t)
+	t.Cleanup(cleanDB)
+
+	alice := edgeTestPerson{Name: "alice"}
+	bob := edgeTestPerson{Name: "bob"}
+	topicOne := edgeTestTopic{Title: "one"}
+	topicTwo := edgeTestTopic{Title: "two"}
+	for _, v := range []any{&alice, &bob} {
+		if err := driver.Create(db, v.(*edgeTestPerson)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, v := range []any{&topicOne, &topicTwo} {
+		if err := driver.Create(db, v.(*edgeTestTopic)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// alice -> one (1), alice -> two (2), bob -> one (3)
+	seededEdges := []struct {
+		from   *edgeTestPerson
+		to     *edgeTestTopic
+		weight float64
+	}{
+		{&alice, &topicOne, 1},
+		{&alice, &topicTwo, 2},
+		{&bob, &topicOne, 3},
+	}
+	for _, seed := range seededEdges {
+		sub := subscribesTo{Weight: seed.weight}
+		if err := driver.CreateEdge(db, &sub, seed.from, seed.to); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// A differently-labeled edge between the same vertices must not leak
+	// into subscribesTo results.
+	other := edgeWithCustomLabel{Note: "noise"}
+	if err := driver.CreateEdge(db, &other, &alice, &topicOne); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run(
+		"FromVertexStruct", func(t *testing.T) {
+			results, err := driver.Model[subscribesTo](db).From(&alice).Find()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(results) != 2 {
+				t.Errorf("expected 2 edges from alice, got %d", len(results))
+			}
+		},
+	)
+	t.Run(
+		"FromRawID", func(t *testing.T) {
+			results, err := driver.Model[subscribesTo](db).From(alice.ID).Find()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(results) != 2 {
+				t.Errorf("expected 2 edges from alice, got %d", len(results))
+			}
+		},
+	)
+	t.Run(
+		"ToVertex", func(t *testing.T) {
+			results, err := driver.Model[subscribesTo](db).To(&topicOne).Find()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(results) != 2 {
+				t.Errorf("expected 2 edges to topic one, got %d", len(results))
+			}
+		},
+	)
+	t.Run(
+		"FromAndTo", func(t *testing.T) {
+			result, err := driver.Model[subscribesTo](db).From(&alice).To(&topicOne).Take()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if result.Weight != 1 {
+				t.Errorf("expected weight 1 for alice->one, got %v", result.Weight)
+			}
+			count, err := driver.Model[subscribesTo](db).From(&alice).To(&topicOne).Count()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if count != 1 {
+				t.Errorf("expected 1 edge between alice and topic one, got %d", count)
+			}
+		},
+	)
+	t.Run(
+		"FromWithWhere", func(t *testing.T) {
+			results, err := driver.Model[subscribesTo](db).
+				From(&alice).
+				Where("weight", comparator.GT, 1.0).
+				Find()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(results) != 1 || results[0].Weight != 2 {
+				t.Errorf("expected single weight-2 edge, got %v", results)
+			}
+		},
+	)
+	t.Run(
+		"Errors", func(t *testing.T) {
+			if _, err := driver.Model[edgeTestPerson](db).From(&alice).Find(); err == nil ||
+				!strings.Contains(err.Error(), "only supported on edge queries") {
+				t.Errorf("expected vertex-query error, got %v", err)
+			}
+			unsaved := edgeTestPerson{Name: "unsaved"}
+			if _, err := driver.Model[subscribesTo](db).From(&unsaved).Find(); err == nil ||
+				!strings.Contains(err.Error(), "vertex has no id") {
+				t.Errorf("expected missing id error, got %v", err)
+			}
+			if _, err := driver.Model[subscribesTo](db).From(nil).Find(); err == nil ||
+				!strings.Contains(err.Error(), "endpoint is nil") {
+				t.Errorf("expected nil endpoint error, got %v", err)
+			}
+			if _, err := driver.Model[subscribesTo](db).
+				PreQuery(db.G().V()).
+				From(&alice).
+				Find(); err == nil ||
+				!strings.Contains(err.Error(), "cannot be combined with PreQuery") {
+				t.Errorf("expected PreQuery combination error, got %v", err)
+			}
+			if _, err := driver.Model[subscribesTo](db).
+				From(&alice).
+				PreQuery(db.G().V()).
+				Find(); err == nil ||
+				!strings.Contains(err.Error(), "cannot be combined with From/To") {
+				t.Errorf("expected From/To combination error, got %v", err)
+			}
+		},
+	)
+	t.Run(
+		"FromWithDelete", func(t *testing.T) {
+			if err := driver.Model[subscribesTo](db).From(&bob).Delete(); err != nil {
+				t.Fatal(err)
+			}
+			count, err := driver.Model[subscribesTo](db).Count()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if count != 2 {
+				t.Errorf("expected 2 edges after deleting bob's, got %d", count)
+			}
+		},
+	)
+}
+
 func TestEdgePreloadNotSupported(t *testing.T) {
 	db := openEdgeTestDB(t)
 	_, err := driver.Model[subscribesTo](db).Preload("Topics").Find()

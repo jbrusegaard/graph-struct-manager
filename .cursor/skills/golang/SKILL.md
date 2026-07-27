@@ -27,6 +27,9 @@ Gremlin traversals.
 - Edge structs embed `gsmtypes.Edge` anonymously and implement `gsmtypes.EdgeType`. Create
   edges with `CreateEdge(db, &edge, from, to)` / `SaveEdge`; endpoints accept vertex structs
   or raw IDs. `Model[E]` auto-detects edge types (schema `isEdge`) and traverses `g.E()`.
+- Query a vertex's edges with `Model[E].From(vertex)` / `.To(vertex)` (starts at
+  `g.V(id).OutE()`/`InE()`, not a `g.E()` scan); edge-query-only, mutually exclusive with
+  `PreQuery`.
 - Edge properties are single-valued: never pass a Cardinality argument when writing edge
   properties (TinkerPop rejects it); `Preload` is vertex-only.
 - Use `gremlin:"field_name"` tags for properties; `gremlin:"field_name,omitempty"` skips
