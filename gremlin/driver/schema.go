@@ -23,6 +23,12 @@ type fieldSchema struct {
 	subTraversalTag string
 	omitEmpty       bool
 	isEdge          bool
+	// isSerializer marks fields whose type implements
+	// gsmtypes.SerializerType; structToMap serializes them before writing.
+	isSerializer bool
+	// isDeserializer marks fields whose type implements
+	// gsmtypes.DeserializerType; result unpacking delegates to it.
+	isDeserializer bool
 }
 
 // typeSchema holds everything the driver needs to know about a model type.
@@ -106,6 +112,34 @@ func typeImplementsEdgeType(rt reflect.Type) bool {
 	// reflect.New covers both value and pointer receiver implementations.
 	_, ok := reflect.New(rt).Interface().(gsmtypes.EdgeType)
 	return ok
+}
+
+var (
+	serializerInterfaceType   = reflect.TypeFor[gsmtypes.SerializerType]()
+	deserializerInterfaceType = reflect.TypeFor[gsmtypes.DeserializerType]()
+)
+
+// typeImplementsSerializer reports whether rt implements
+// gsmtypes.SerializerType with a value or pointer receiver. Pointer field
+// types are checked through their element type because field values are
+// dereferenced before serialization.
+func typeImplementsSerializer(rt reflect.Type) bool {
+	if rt.Kind() == reflect.Pointer {
+		rt = rt.Elem()
+	}
+	return rt.Implements(serializerInterfaceType) ||
+		reflect.PointerTo(rt).Implements(serializerInterfaceType)
+}
+
+// typeImplementsDeserializer reports whether rt implements
+// gsmtypes.DeserializerType. Only the pointer type needs checking: pointer
+// method sets include value-receiver methods, and deserialization always
+// happens through an addressable value.
+func typeImplementsDeserializer(rt reflect.Type) bool {
+	if rt.Kind() == reflect.Pointer {
+		rt = rt.Elem()
+	}
+	return reflect.PointerTo(rt).Implements(deserializerInterfaceType)
 }
 
 // resolveLastModifiedProperty returns the property the driver automatically
@@ -229,6 +263,7 @@ func unloadFieldSchema(field reflect.StructField, index []int) (fieldSchema, boo
 		goName:          field.Name,
 		tagName:         tagName,
 		subTraversalTag: subTraversalTag,
+		isDeserializer:  typeImplementsDeserializer(field.Type),
 	}, true
 }
 
@@ -262,10 +297,11 @@ func collectMapFields(rt reflect.Type, index []int) []fieldSchema {
 		}
 
 		fields = append(fields, fieldSchema{
-			index:     fieldIndex,
-			goName:    field.Name,
-			tagName:   tagParts.name,
-			omitEmpty: tagParts.omitEmpty,
+			index:        fieldIndex,
+			goName:       field.Name,
+			tagName:      tagParts.name,
+			omitEmpty:    tagParts.omitEmpty,
+			isSerializer: typeImplementsSerializer(field.Type),
 		})
 	}
 	return fields

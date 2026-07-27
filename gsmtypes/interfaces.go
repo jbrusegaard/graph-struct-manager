@@ -48,3 +48,31 @@ type LastModifiedPropertyType interface {
 type UnmappedPropertiesType interface {
 	SetUnmappedProperties(properties map[string]any)
 }
+
+// SerializerType lets a field type control how its value is persisted as a
+// gremlin property. Gremlin property values must be primitives, so types it
+// cannot store natively (maps, nested structs, ...) can implement
+// SerializerType to convert themselves into a string before being written.
+//
+// SerializeGremlinValue is called on tagged fields whose type implements
+// this interface (value or pointer receiver) whenever the model is created,
+// saved, or updated, and on values passed to Query.Where,
+// Query.Update, and Query.Updates. The returned string is written as the
+// property value in place of the original.
+//
+// Implement DeserializerType on the same type to convert the stored value
+// back when results are loaded.
+type SerializerType interface {
+	SerializeGremlinValue() (string, error)
+}
+
+// DeserializerType lets a field type control how a stored gremlin property
+// value is converted back into the field when query results are unpacked.
+//
+// DeserializeGremlinValue receives the raw property value returned by
+// gremlin and must populate the receiver, so implement it with a pointer
+// receiver. Fields declared as pointers are allocated before the method is
+// invoked.
+type DeserializerType interface {
+	DeserializeGremlinValue(value any) error
+}

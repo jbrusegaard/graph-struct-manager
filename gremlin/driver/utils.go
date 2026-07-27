@@ -86,7 +86,9 @@ func unloadGremlinMapIntoStruct(v any, mapResult map[any]any) error {
 		usedKeys = make(map[string]struct{}, len(stringMap))
 	}
 
-	unloadSchemaFields(elem, stringMap, usedKeys)
+	if err := unloadSchemaFields(elem, stringMap, usedKeys); err != nil {
+		return err
+	}
 
 	if collectUnmapped {
 		extras := make(map[string]any, len(stringMap))
@@ -108,7 +110,7 @@ func unloadSchemaFields(
 	elem reflect.Value,
 	stringMap map[string]any,
 	usedKeys map[string]struct{},
-) {
+) error {
 	schema := schemaFor(elem.Type())
 	for i := range schema.unloadFields {
 		fieldSchema := &schema.unloadFields[i]
@@ -141,8 +143,85 @@ func unloadSchemaFields(
 		if usedKeys != nil {
 			usedKeys[selectedKey] = struct{}{}
 		}
+		if fieldSchema.isDeserializer {
+			if err := deserializeGremlinValue(field, stringMap[selectedKey]); err != nil {
+				return fmt.Errorf(
+					"deserialize property %q into field %s: %w",
+					selectedKey, fieldSchema.goName, err,
+				)
+			}
+			continue
+		}
 		setFieldFromValue(field, stringMap[selectedKey])
 	}
+	return nil
+}
+
+// serializeGremlinValue converts a field value whose type implements
+// gsmtypes.SerializerType into its string gremlin representation.
+// Non-addressable values with pointer-receiver implementations are copied so
+// the method can be invoked.
+func serializeGremlinValue(rv reflect.Value) (string, error) {
+	if serializer, ok := rv.Interface().(gsmtypes.SerializerType); ok {
+		return serializer.SerializeGremlinValue()
+	}
+	if rv.CanAddr() {
+		if serializer, ok := rv.Addr().Interface().(gsmtypes.SerializerType); ok {
+			return serializer.SerializeGremlinValue()
+		}
+	}
+	ptr := reflect.New(rv.Type())
+	ptr.Elem().Set(rv)
+	serializer, ok := ptr.Interface().(gsmtypes.SerializerType)
+	if !ok {
+		return "", fmt.Errorf("type %s does not implement gsmtypes.SerializerType", rv.Type())
+	}
+	return serializer.SerializeGremlinValue()
+}
+
+// maybeSerializeValue serializes value when it implements
+// gsmtypes.SerializerType, directly or through its pointer method set. The
+// second return reports whether serialization happened; values that do not
+// implement the interface pass through unchanged.
+func maybeSerializeValue(value any) (any, bool, error) {
+	if value == nil {
+		return value, false, nil
+	}
+	rv := reflect.ValueOf(value)
+	if rv.Kind() == reflect.Pointer && rv.IsNil() {
+		return value, false, nil
+	}
+	if serializer, ok := value.(gsmtypes.SerializerType); ok {
+		serialized, err := serializer.SerializeGremlinValue()
+		return serialized, true, err
+	}
+	if rv.Kind() == reflect.Pointer ||
+		!reflect.PointerTo(rv.Type()).Implements(serializerInterfaceType) {
+		return value, false, nil
+	}
+	serialized, err := serializeGremlinValue(rv)
+	return serialized, true, err
+}
+
+// deserializeGremlinValue loads a raw gremlin property value into a field
+// whose type implements gsmtypes.DeserializerType. Pointer fields are
+// allocated before delegating to the implementation.
+func deserializeGremlinValue(field reflect.Value, value any) error {
+	target := field
+	if field.Kind() == reflect.Pointer {
+		target = reflect.New(field.Type().Elem()).Elem()
+	}
+	deserializer, ok := target.Addr().Interface().(gsmtypes.DeserializerType)
+	if !ok {
+		return fmt.Errorf("type %s does not implement gsmtypes.DeserializerType", field.Type())
+	}
+	if err := deserializer.DeserializeGremlinValue(value); err != nil {
+		return err
+	}
+	if field.Kind() == reflect.Pointer {
+		field.Set(target.Addr())
+	}
+	return nil
 }
 
 var unmappedPropertiesType = reflect.TypeFor[gsmtypes.UnmappedPropertiesType]()
@@ -176,6 +255,11 @@ func selectGremlinKey(tagName, subTraversalTag string, stringMap map[string]any)
 }
 
 func setFieldFromValue(field reflect.Value, value any) {
+	// Gremlin results are external data; a nil property value has nothing
+	// to assign and would panic the reflect conversions below.
+	if value == nil {
+		return
+	}
 	// Assign a Gremlin value into a field, handling slice conversions.
 	gType := reflect.TypeOf(value)
 
@@ -314,6 +398,15 @@ func structToMap(
 
 		// If omitempty is set, skip zero values
 		if fieldSchema.omitEmpty && fieldValue.IsZero() {
+			continue
+		}
+
+		if fieldSchema.isSerializer {
+			serialized, err := serializeGremlinValue(fieldValue)
+			if err != nil {
+				return nil, fmt.Errorf("serialize property %q: %w", fieldSchema.tagName, err)
+			}
+			mapValue[fieldSchema.tagName] = serialized
 			continue
 		}
 
