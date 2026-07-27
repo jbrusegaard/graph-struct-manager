@@ -26,8 +26,9 @@ Gremlin traversals.
 - Vertex structs must embed `gsmtypes.Vertex` anonymously; `Create`/`Update` validate this.
 - Edge structs embed `gsmtypes.Edge` anonymously and implement `gsmtypes.EdgeType`. Create
   edges with `CreateEdge(db, &edge, from, to)` / `SaveEdge`; endpoints accept vertex structs
-  or raw IDs. `Model[E]` auto-detects edge types (schema `isEdge`) and traverses `g.E()`.
-- Query a vertex's edges with `Model[E].From(vertex)` / `.To(vertex)` (starts at
+  or raw IDs. Prefer `Edge[E](db)` for edge queries (`Model[E]` still works via schema
+  `isEdge` and traverses `g.E()`).
+- Query a vertex's edges with `Edge[E].From(vertex)` / `.To(vertex)` (starts at
   `g.V(id).OutE()`/`InE()`, not a `g.E()` scan); edge-query-only, mutually exclusive with
   `PreQuery`.
 - Edge properties are single-valued: never pass a Cardinality argument when writing edge

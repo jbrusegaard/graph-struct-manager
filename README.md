@@ -301,26 +301,26 @@ Gremlin cannot re-point an existing edge, so the endpoints are only used on crea
 
 ### Querying Edges
 
-The full query builder works on edge types. Because the struct embeds `gsmtypes.Edge`, `Model` automatically traverses edges (`g.E()`) instead of vertices:
+Prefer `Edge[E]` when querying edges — it matches `CreateEdge`/`SaveEdge` and fails fast if `E` is not an edge type. `Model[E]` still works for edge types via schema detection, but `Edge` makes the element kind explicit. Because the struct embeds `gsmtypes.Edge`, the query traverses `g.E()` instead of `g.V()`:
 
 ```go
 // Find, Take, ID, Count
-heavy, err := GSM.Model[SubscribesTo](db).
+heavy, err := GSM.Edge[SubscribesTo](db).
     Where("weight", comparator.GT, 2.0).
     OrderBy("weight", GSM.Desc).
     Find()
 
-sub, err := GSM.Model[SubscribesTo](db).ID(edgeID)
+sub, err := GSM.Edge[SubscribesTo](db).ID(edgeID)
 
 // Targeted property updates and removals
-err = GSM.Model[SubscribesTo](db).
+err = GSM.Edge[SubscribesTo](db).
     Where("weight", comparator.GT, 2.0).
     Updates(map[string]any{"notes": "heavy subscription"})
 
-err = GSM.Model[SubscribesTo](db).RemoveProperty("notes")
+err = GSM.Edge[SubscribesTo](db).RemoveProperty("notes")
 
 // Delete matching edges
-err = GSM.Model[SubscribesTo](db).
+err = GSM.Edge[SubscribesTo](db).
     Where("weight", comparator.LT, 0.1).
     Delete()
 ```
@@ -331,17 +331,17 @@ Use `From` and `To` to query the edges attached to a specific vertex. Both accep
 
 ```go
 // All subscriptions leaving a person
-subs, err := GSM.Model[SubscribesTo](db).From(&person).Find()
+subs, err := GSM.Edge[SubscribesTo](db).From(&person).Find()
 
 // All subscriptions arriving at a topic
-subs, err = GSM.Model[SubscribesTo](db).To(&topic).Find()
+subs, err = GSM.Edge[SubscribesTo](db).To(&topic).Find()
 
 // The edge(s) between a specific pair of vertices
-sub, err := GSM.Model[SubscribesTo](db).From(&person).To(&topic).Take()
+sub, err := GSM.Edge[SubscribesTo](db).From(&person).To(&topic).Take()
 
 // Chain with the rest of the query builder as usual
-err = GSM.Model[SubscribesTo](db).From(&person).To(&topic).Delete() // unsubscribe
-heavy, err := GSM.Model[SubscribesTo](db).
+err = GSM.Edge[SubscribesTo](db).From(&person).To(&topic).Delete() // unsubscribe
+heavy, err := GSM.Edge[SubscribesTo](db).
     From(&person).
     Where("weight", comparator.GT, 2.0).
     Find()

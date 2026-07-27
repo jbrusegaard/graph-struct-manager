@@ -78,7 +78,7 @@ func TestCreateEdge(t *testing.T) {
 		t.Error("edge LastModified should be stamped on create")
 	}
 
-	loaded, err := driver.Model[subscribesTo](db).ID(sub.ID)
+	loaded, err := driver.Edge[subscribesTo](db).ID(sub.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,7 +120,7 @@ func TestCreateEdgeWithRawIDs(t *testing.T) {
 	if sub.ID == nil {
 		t.Error("edge ID should be set after create")
 	}
-	loaded, err := driver.Model[subscribesTo](db).ID(sub.ID)
+	loaded, err := driver.Edge[subscribesTo](db).ID(sub.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -195,14 +195,14 @@ func TestSaveEdge(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	count, err := driver.Model[subscribesTo](db).Count()
+	count, err := driver.Edge[subscribesTo](db).Count()
 	if err != nil {
 		t.Fatal(err)
 	}
 	if count != 1 {
 		t.Errorf("expected 1 edge after save-update, got %d", count)
 	}
-	loaded, err := driver.Model[subscribesTo](db).ID(sub.ID)
+	loaded, err := driver.Edge[subscribesTo](db).ID(sub.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -246,7 +246,7 @@ func TestEdgeQueryBuilder(t *testing.T) {
 
 	t.Run(
 		"FindWhere", func(t *testing.T) {
-			results, err := driver.Model[subscribesTo](db).
+			results, err := driver.Edge[subscribesTo](db).
 				Where("weight", comparator.GT, 1.0).
 				Find()
 			if err != nil {
@@ -259,7 +259,7 @@ func TestEdgeQueryBuilder(t *testing.T) {
 	)
 	t.Run(
 		"Count", func(t *testing.T) {
-			count, err := driver.Model[subscribesTo](db).Count()
+			count, err := driver.Edge[subscribesTo](db).Count()
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -270,7 +270,7 @@ func TestEdgeQueryBuilder(t *testing.T) {
 	)
 	t.Run(
 		"OrderBy", func(t *testing.T) {
-			results, err := driver.Model[subscribesTo](db).
+			results, err := driver.Edge[subscribesTo](db).
 				OrderBy("weight", driver.Desc).
 				Find()
 			if err != nil {
@@ -289,7 +289,7 @@ func TestEdgeQueryBuilder(t *testing.T) {
 	)
 	t.Run(
 		"Take", func(t *testing.T) {
-			result, err := driver.Model[subscribesTo](db).
+			result, err := driver.Edge[subscribesTo](db).
 				Where("weight", comparator.EQ, 2.0).
 				Take()
 			if err != nil {
@@ -302,7 +302,7 @@ func TestEdgeQueryBuilder(t *testing.T) {
 	)
 	t.Run(
 		"TakeNotFound", func(t *testing.T) {
-			_, err := driver.Model[subscribesTo](db).
+			_, err := driver.Edge[subscribesTo](db).
 				Where("weight", comparator.GT, 100.0).
 				Take()
 			if !errors.Is(err, gsmtypes.ErrNotFound) {
@@ -312,7 +312,7 @@ func TestEdgeQueryBuilder(t *testing.T) {
 	)
 	t.Run(
 		"Limit", func(t *testing.T) {
-			results, err := driver.Model[subscribesTo](db).Limit(2).Find()
+			results, err := driver.Edge[subscribesTo](db).Limit(2).Find()
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -323,13 +323,13 @@ func TestEdgeQueryBuilder(t *testing.T) {
 	)
 	t.Run(
 		"Delete", func(t *testing.T) {
-			err := driver.Model[subscribesTo](db).
+			err := driver.Edge[subscribesTo](db).
 				Where("weight", comparator.GT, 1.0).
 				Delete()
 			if err != nil {
 				t.Fatal(err)
 			}
-			count, err := driver.Model[subscribesTo](db).Count()
+			count, err := driver.Edge[subscribesTo](db).Count()
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -350,13 +350,13 @@ func TestEdgeUpdatesAndRemoveProperty(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := driver.Model[subscribesTo](db).
+	err := driver.Edge[subscribesTo](db).
 		Where("weight", comparator.EQ, 1.0).
 		Updates(map[string]any{"notes": "bulk-updated", "weight": 9.0})
 	if err != nil {
 		t.Fatal(err)
 	}
-	loaded, err := driver.Model[subscribesTo](db).ID(sub.ID)
+	loaded, err := driver.Edge[subscribesTo](db).ID(sub.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -370,13 +370,13 @@ func TestEdgeUpdatesAndRemoveProperty(t *testing.T) {
 		t.Error("Updates should refresh the edge's last_modified property")
 	}
 
-	err = driver.Model[subscribesTo](db).
+	err = driver.Edge[subscribesTo](db).
 		Where("weight", comparator.EQ, 9.0).
 		RemoveProperty("notes")
 	if err != nil {
 		t.Fatal(err)
 	}
-	loaded, err = driver.Model[subscribesTo](db).ID(sub.ID)
+	loaded, err = driver.Edge[subscribesTo](db).ID(sub.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -386,7 +386,7 @@ func TestEdgeUpdatesAndRemoveProperty(t *testing.T) {
 
 	t.Run(
 		"UnknownProperty", func(t *testing.T) {
-			err := driver.Model[subscribesTo](db).Update("unknown_property", 1)
+			err := driver.Edge[subscribesTo](db).Update("unknown_property", 1)
 			if err == nil {
 				t.Error("expected error updating unknown property")
 			}
@@ -458,7 +458,7 @@ func TestEdgeHooks(t *testing.T) {
 		)
 	}
 
-	loaded, err := driver.Model[hookEdge](db).ID(edge.ID)
+	loaded, err := driver.Edge[hookEdge](db).ID(edge.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -492,7 +492,7 @@ func TestEdgeCustomLabel(t *testing.T) {
 	if label.GetString() != "a custom edge label" {
 		t.Errorf("expected custom label, got %q", label.GetString())
 	}
-	loaded, err := driver.Model[edgeWithCustomLabel](db).Take()
+	loaded, err := driver.Edge[edgeWithCustomLabel](db).Take()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -539,7 +539,7 @@ func TestCreateEdgeCustomIDGenerator(t *testing.T) {
 	if sub.ID != edgeID {
 		t.Errorf("expected edge ID %v, got %v", edgeID, sub.ID)
 	}
-	loaded, err := driver.Model[subscribesTo](db).ID(edgeID.String())
+	loaded, err := driver.Edge[subscribesTo](db).ID(edgeID.String())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -591,7 +591,7 @@ func TestEdgeQueryFromTo(t *testing.T) {
 
 	t.Run(
 		"FromVertexStruct", func(t *testing.T) {
-			results, err := driver.Model[subscribesTo](db).From(&alice).Find()
+			results, err := driver.Edge[subscribesTo](db).From(&alice).Find()
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -602,7 +602,7 @@ func TestEdgeQueryFromTo(t *testing.T) {
 	)
 	t.Run(
 		"FromRawID", func(t *testing.T) {
-			results, err := driver.Model[subscribesTo](db).From(alice.ID).Find()
+			results, err := driver.Edge[subscribesTo](db).From(alice.ID).Find()
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -613,7 +613,7 @@ func TestEdgeQueryFromTo(t *testing.T) {
 	)
 	t.Run(
 		"ToVertex", func(t *testing.T) {
-			results, err := driver.Model[subscribesTo](db).To(&topicOne).Find()
+			results, err := driver.Edge[subscribesTo](db).To(&topicOne).Find()
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -624,14 +624,14 @@ func TestEdgeQueryFromTo(t *testing.T) {
 	)
 	t.Run(
 		"FromAndTo", func(t *testing.T) {
-			result, err := driver.Model[subscribesTo](db).From(&alice).To(&topicOne).Take()
+			result, err := driver.Edge[subscribesTo](db).From(&alice).To(&topicOne).Take()
 			if err != nil {
 				t.Fatal(err)
 			}
 			if result.Weight != 1 {
 				t.Errorf("expected weight 1 for alice->one, got %v", result.Weight)
 			}
-			count, err := driver.Model[subscribesTo](db).From(&alice).To(&topicOne).Count()
+			count, err := driver.Edge[subscribesTo](db).From(&alice).To(&topicOne).Count()
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -642,7 +642,7 @@ func TestEdgeQueryFromTo(t *testing.T) {
 	)
 	t.Run(
 		"FromWithWhere", func(t *testing.T) {
-			results, err := driver.Model[subscribesTo](db).
+			results, err := driver.Edge[subscribesTo](db).
 				From(&alice).
 				Where("weight", comparator.GT, 1.0).
 				Find()
@@ -656,27 +656,31 @@ func TestEdgeQueryFromTo(t *testing.T) {
 	)
 	t.Run(
 		"Errors", func(t *testing.T) {
+			if _, err := driver.Edge[edgeTestPerson](db).Find(); err == nil ||
+				!strings.Contains(err.Error(), "does not implement EdgeType") {
+				t.Errorf("expected Edge on vertex type error, got %v", err)
+			}
 			if _, err := driver.Model[edgeTestPerson](db).From(&alice).Find(); err == nil ||
 				!strings.Contains(err.Error(), "only supported on edge queries") {
 				t.Errorf("expected vertex-query error, got %v", err)
 			}
 			unsaved := edgeTestPerson{Name: "unsaved"}
-			if _, err := driver.Model[subscribesTo](db).From(&unsaved).Find(); err == nil ||
+			if _, err := driver.Edge[subscribesTo](db).From(&unsaved).Find(); err == nil ||
 				!strings.Contains(err.Error(), "vertex has no id") {
 				t.Errorf("expected missing id error, got %v", err)
 			}
-			if _, err := driver.Model[subscribesTo](db).From(nil).Find(); err == nil ||
+			if _, err := driver.Edge[subscribesTo](db).From(nil).Find(); err == nil ||
 				!strings.Contains(err.Error(), "endpoint is nil") {
 				t.Errorf("expected nil endpoint error, got %v", err)
 			}
-			if _, err := driver.Model[subscribesTo](db).
+			if _, err := driver.Edge[subscribesTo](db).
 				PreQuery(db.G().V()).
 				From(&alice).
 				Find(); err == nil ||
 				!strings.Contains(err.Error(), "cannot be combined with PreQuery") {
 				t.Errorf("expected PreQuery combination error, got %v", err)
 			}
-			if _, err := driver.Model[subscribesTo](db).
+			if _, err := driver.Edge[subscribesTo](db).
 				From(&alice).
 				PreQuery(db.G().V()).
 				Find(); err == nil ||
@@ -687,10 +691,10 @@ func TestEdgeQueryFromTo(t *testing.T) {
 	)
 	t.Run(
 		"FromWithDelete", func(t *testing.T) {
-			if err := driver.Model[subscribesTo](db).From(&bob).Delete(); err != nil {
+			if err := driver.Edge[subscribesTo](db).From(&bob).Delete(); err != nil {
 				t.Fatal(err)
 			}
-			count, err := driver.Model[subscribesTo](db).Count()
+			count, err := driver.Edge[subscribesTo](db).Count()
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -703,7 +707,7 @@ func TestEdgeQueryFromTo(t *testing.T) {
 
 func TestEdgePreloadNotSupported(t *testing.T) {
 	db := openEdgeTestDB(t)
-	_, err := driver.Model[subscribesTo](db).Preload("Topics").Find()
+	_, err := driver.Edge[subscribesTo](db).Preload("Topics").Find()
 	if err == nil || !strings.Contains(err.Error(), "not supported on edge queries") {
 		t.Errorf("expected preload error for edge query, got %v", err)
 	}

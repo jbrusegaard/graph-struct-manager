@@ -288,7 +288,7 @@ func (q *Query[T]) IDs(id ...any) *Query[T] {
 // all edges, so this is also the fast way to query a vertex's edges.
 // Only supported on edge queries and cannot be combined with PreQuery.
 //
-//	subs, err := driver.Model[SubscribesTo](db).From(&person).Find()
+//	subs, err := driver.Edge[SubscribesTo](db).From(&person).Find()
 func (q *Query[T]) From(vertex any) *Query[T] {
 	return q.setEndpoint(vertex, &q.fromVertexID, "From")
 }
@@ -300,7 +300,7 @@ func (q *Query[T]) From(vertex any) *Query[T] {
 // Combine with From to match edges between a specific pair of vertices.
 // Only supported on edge queries and cannot be combined with PreQuery.
 //
-//	subs, err := driver.Model[SubscribesTo](db).From(&person).To(&topic).Find()
+//	subs, err := driver.Edge[SubscribesTo](db).From(&person).To(&topic).Find()
 func (q *Query[T]) To(vertex any) *Query[T] {
 	return q.setEndpoint(vertex, &q.toVertexID, "To")
 }
