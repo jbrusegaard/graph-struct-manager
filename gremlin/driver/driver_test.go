@@ -90,6 +90,31 @@ func TestDriverModel(t *testing.T) {
 	}
 }
 
+func TestDriverEdge(t *testing.T) {
+	db, err := driver.Open(
+		DbURL, driver.Config{
+			Driver: dbDriver,
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	type testEdge struct {
+		gsmtypes.Edge
+		Weight float64 `gremlin:"weight"`
+	}
+	edgeQuery := driver.Edge[testEdge](db)
+	if edgeQuery == nil {
+		t.Fatal("Edge should not be nil")
+	}
+	if _, err := driver.Edge[testVertex](db).Find(); err == nil ||
+		err.Error() != "edge: type does not implement EdgeType" {
+		t.Errorf("expected EdgeType error for vertex type, got %v", err)
+	}
+}
+
 func TestDriverWhere(t *testing.T) {
 	db, err := driver.Open(
 		DbURL, driver.Config{

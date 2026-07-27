@@ -134,9 +134,24 @@ func Save[T any](driver *GremlinDriver, v *T) error {
 
 // Package-level generic functions
 
-// Model returns a new query builder for the specified type
+// Model returns a new query builder for the specified type. Prefer Model for
+// vertex types; for edge types prefer Edge, which makes the element kind
+// explicit. Model still works for edge types via schema detection.
 func Model[T any](driver *GremlinDriver) *Query[T] {
 	return NewQuery[T](driver)
+}
+
+// Edge returns a new query builder for an edge type. Prefer Edge over Model
+// when querying edges — it matches CreateEdge/SaveEdge and fails fast when E
+// does not implement gsmtypes.EdgeType.
+//
+//	subs, err := driver.Edge[SubscribesTo](db).From(&person).Find()
+func Edge[E any](driver *GremlinDriver) *Query[E] {
+	q := NewQuery[E](driver)
+	if !q.isEdgeQuery {
+		q.err = errors.New("edge: type does not implement EdgeType")
+	}
+	return q
 }
 
 // Where is a convenience method that creates a new query with a condition

@@ -13,8 +13,11 @@ type VertexType interface {
 
 type EdgeType interface {
 	GetEdgeID() any
-	GetEdgeLastModified() string
-	GetEdgeCreatedAt() int64
+	GetEdgeLastModified() time.Time
+	GetEdgeCreatedAt() time.Time
+	SetEdgeID(id any)
+	SetEdgeLastModified(t time.Time)
+	SetEdgeCreatedAt(t time.Time)
 }
 
 type CustomLabelType interface {

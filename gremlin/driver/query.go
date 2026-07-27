@@ -37,8 +37,11 @@ type Query[T any] struct {
 	debugString    *strings.Builder
 	dedup          bool
 	err            error
+	fromVertexID   any
 	ids            []any
+	isEdgeQuery    bool
 	labels         []any
+	toVertexID     any
 	limit          *int
 	offset         *int
 	orderBy        *OrderCondition
@@ -114,22 +117,27 @@ type OrderCondition struct {
 func GetLabel[T any]() string {
 	var v T
 	// Use getLabelFromValue to support both pointer and value receivers
-	label := getLabelFromVertex(v)
+	label := getLabelFromValue(v)
 	return label
 }
 
-// NewQuery creates a new query builder for type T
+// NewQuery creates a new query builder for type T.
+// Types embedding gsmtypes.Edge query edges (g.E()) instead of vertices.
 func NewQuery[T any](db *GremlinDriver) *Query[T] {
 	label := GetLabel[T]()
+	schema := schemaFor(reflect.TypeFor[T]())
 	queryAsString := strings.Builder{}
-	queryAsString.WriteString("V()")
+	if schema.isEdge {
+		queryAsString.WriteString("E()")
+	} else {
+		queryAsString.WriteString("V()")
+	}
 	if label != "" {
 		queryAsString.WriteString(".HasLabel(")
 		queryAsString.WriteString(label)
 		queryAsString.WriteString(")")
 	}
 	ids := make([]any, 0)
-	fields := schemaFor(reflect.TypeFor[T]()).selectedFields
 	labels := []any{label}
 	return &Query[T]{
 		conditions:     make([]*QueryCondition, 0),
@@ -137,9 +145,10 @@ func NewQuery[T any](db *GremlinDriver) *Query[T] {
 		debug:          os.Getenv("GSM_DEBUG") == "true",
 		debugString:    &queryAsString,
 		ids:            ids,
+		isEdgeQuery:    schema.isEdge,
 		labels:         labels,
 		orderBy:        nil,
-		selectedFields: fields,
+		selectedFields: schema.selectedFields,
 		subTraversals:  make(map[string]*gremlingo.GraphTraversal),
 	}
 }
@@ -243,6 +252,10 @@ func (q *Query[T]) PreQuery(traversal *gremlingo.GraphTraversal) *Query[T] {
 	if traversal == nil {
 		return q
 	}
+	if q.fromVertexID != nil || q.toVertexID != nil {
+		q.err = errors.New("prequery: cannot be combined with From/To")
+		return q
+	}
 	q.preTraversal = traversal
 	q.resetDebugStringForPreQuery()
 	return q
@@ -252,9 +265,12 @@ func (q *Query[T]) PreQuery(traversal *gremlingo.GraphTraversal) *Query[T] {
 // You can use this to speed up the query by using the graph index
 func (q *Query[T]) IDs(id ...any) *Query[T] {
 	if q.debug {
-		if q.preTraversal != nil {
+		switch {
+		case q.preTraversal != nil:
 			q.writeDebugString(".HasId(")
-		} else {
+		case q.isEdgeQuery:
+			q.writeDebugString(".E(")
+		default:
 			q.writeDebugString(".V(")
 		}
 		for _, id := range id {
@@ -263,6 +279,49 @@ func (q *Query[T]) IDs(id ...any) *Query[T] {
 		q.writeDebugString(")")
 	}
 	q.ids = append(q.ids, id...)
+	return q
+}
+
+// From constrains an edge query to edges leaving the given vertex. The
+// vertex may be a GSM vertex struct (its ID is used) or a raw vertex ID.
+// The traversal starts at the vertex (g.V(id).OutE()) instead of scanning
+// all edges, so this is also the fast way to query a vertex's edges.
+// Only supported on edge queries and cannot be combined with PreQuery.
+//
+//	subs, err := driver.Edge[SubscribesTo](db).From(&person).Find()
+func (q *Query[T]) From(vertex any) *Query[T] {
+	return q.setEndpoint(vertex, &q.fromVertexID, "From")
+}
+
+// To constrains an edge query to edges arriving at the given vertex. The
+// vertex may be a GSM vertex struct (its ID is used) or a raw vertex ID.
+// The traversal starts at the vertex (g.V(id).InE()) instead of scanning
+// all edges, so this is also the fast way to query a vertex's edges.
+// Combine with From to match edges between a specific pair of vertices.
+// Only supported on edge queries and cannot be combined with PreQuery.
+//
+//	subs, err := driver.Edge[SubscribesTo](db).From(&person).To(&topic).Find()
+func (q *Query[T]) To(vertex any) *Query[T] {
+	return q.setEndpoint(vertex, &q.toVertexID, "To")
+}
+
+// setEndpoint validates and stores a From/To endpoint constraint.
+func (q *Query[T]) setEndpoint(vertex any, target *any, step string) *Query[T] {
+	if !q.isEdgeQuery {
+		q.err = fmt.Errorf("%s: only supported on edge queries", strings.ToLower(step))
+		return q
+	}
+	if q.preTraversal != nil {
+		q.err = fmt.Errorf("%s: cannot be combined with PreQuery", strings.ToLower(step))
+		return q
+	}
+	id, err := resolveEndpointID(vertex)
+	if err != nil {
+		q.err = fmt.Errorf("%s vertex: %w", strings.ToLower(step), err)
+		return q
+	}
+	q.writeDebugString(fmt.Sprintf(".%s(%v)", step, id))
+	*target = id
 	return q
 }
 
@@ -423,6 +482,9 @@ func (q *Query[T]) Take() (T, error) {
 
 // Count returns the number of matching results
 func (q *Query[T]) Count() (int, error) {
+	if q.err != nil {
+		return 0, q.err
+	}
 	q.writeDebugString(".Count()")
 	query := q.BuildQuery().Count()
 	result, defaultVal, err := nextWithDefaultValue(query, 0)
@@ -441,19 +503,23 @@ func (q *Query[T]) Count() (int, error) {
 
 // Delete deletes all matching results
 func (q *Query[T]) Delete() error {
+	if q.err != nil {
+		return q.err
+	}
 	q.writeDebugString(".Drop().Iterate()")
 	query := q.BuildQuery()
 	err := query.Drop().Iterate()
 	return <-err
 }
 
-// ID finds vertex by id in a more optimized way than using where
+// ID finds a vertex (or edge, for edge models) by id in a more optimized way
+// than using where
 func (q *Query[T]) ID(id any) (T, error) {
 	var v T
 	if q.err != nil {
 		return v, q.err
 	}
-	query := q.db.g.V(id)
+	query := q.startTraversal(id)
 	if len(q.labels) > 0 {
 		query = query.HasLabel(q.labels...)
 	}
@@ -525,7 +591,7 @@ func (q *Query[T]) Updates(properties map[string]any) error {
 
 	query := q.BuildQuery()
 	if lastModifiedProperty := schema.lastModifiedProperty; lastModifiedProperty != "" {
-		query.Property(cardinality.Single, lastModifiedProperty, time.Now().UTC())
+		query = q.stampLastModified(query, lastModifiedProperty)
 	}
 	for _, key := range keys {
 		query = q.applyPropertyUpdate(query, key, fieldTypes[key], properties[key])
@@ -585,10 +651,7 @@ func (q *Query[T]) RemoveProperties(propertyNames ...string) error {
 
 	query := q.BuildQuery()
 	if lastModifiedProperty := schema.lastModifiedProperty; lastModifiedProperty != "" {
-		q.writeDebugString(".Property(Cardinality.Single, ")
-		q.writeDebugString(lastModifiedProperty)
-		q.writeDebugString(", <now>)")
-		query = query.Property(cardinality.Single, lastModifiedProperty, time.Now().UTC())
+		query = q.stampLastModified(query, lastModifiedProperty)
 	}
 	q.writeDebugString(".SideEffect(Properties(")
 	q.writeDebugString(strings.Join(keys, ", "))
@@ -602,15 +665,44 @@ func (q *Query[T]) RemoveProperties(propertyNames ...string) error {
 	return <-errChan
 }
 
+// stampLastModified refreshes the model's last-modified property as part of
+// the traversal. Edge properties are single-valued and reject cardinality
+// arguments, so edge queries write the property without one.
+func (q *Query[T]) stampLastModified(
+	query *gremlingo.GraphTraversal, lastModifiedProperty string,
+) *gremlingo.GraphTraversal {
+	if q.isEdgeQuery {
+		q.writeDebugString(".Property(")
+		q.writeDebugString(lastModifiedProperty)
+		q.writeDebugString(", <now>)")
+		return query.Property(lastModifiedProperty, time.Now().UTC())
+	}
+	q.writeDebugString(".Property(Cardinality.Single, ")
+	q.writeDebugString(lastModifiedProperty)
+	q.writeDebugString(", <now>)")
+	return query.Property(cardinality.Single, lastModifiedProperty, time.Now().UTC())
+}
+
 // applyPropertyUpdate appends the Property steps for a single property to the
 // traversal. Multi-valued (slice) properties are dropped first so stale
 // elements don't survive the update.
+// Edge properties are single-valued in Gremlin, so edge queries write every
+// property (slices included) without a cardinality argument; slice values
+// become a single list-valued property, which is backend-dependent.
 func (q *Query[T]) applyPropertyUpdate(
 	query *gremlingo.GraphTraversal,
 	propertyName string,
 	fieldType reflect.Type,
 	value any,
 ) *gremlingo.GraphTraversal {
+	if q.isEdgeQuery {
+		q.writeDebugString(".Property(")
+		q.writeDebugString(propertyName)
+		q.writeDebugString(", ")
+		q.writeDebugString(fmt.Sprintf("%v", value))
+		q.writeDebugString(")")
+		return query.Property(propertyName, value)
+	}
 	switch fieldType.Kind() { //nolint: exhaustive // We are only handling slices and maps otherwise regular cardinality
 	case reflect.Slice:
 		// Drop the existing property in the same traversal so stale slice
@@ -677,10 +769,15 @@ func (q *Query[T]) buildBaseQuery() *gremlingo.GraphTraversal {
 		if len(q.ids) > 0 {
 			query = query.HasId(q.ids...)
 		}
+	case q.fromVertexID != nil || q.toVertexID != nil:
+		query = q.startEndpointTraversal()
+		if len(q.ids) > 0 {
+			query = query.HasId(q.ids...)
+		}
 	case len(q.ids) > 0:
-		query = q.db.g.V(q.ids...)
+		query = q.startTraversal(q.ids...)
 	default:
-		query = q.db.g.V()
+		query = q.startTraversal()
 	}
 
 	if len(q.labels) > 0 {
@@ -693,6 +790,32 @@ func (q *Query[T]) buildBaseQuery() *gremlingo.GraphTraversal {
 		query = query.Dedup()
 	}
 	return query
+}
+
+// startTraversal begins a traversal at the query's element source: g.E() for
+// edge models, g.V() otherwise.
+func (q *Query[T]) startTraversal(ids ...any) *gremlingo.GraphTraversal {
+	if q.isEdgeQuery {
+		return q.db.g.E(ids...)
+	}
+	return q.db.g.V(ids...)
+}
+
+// startEndpointTraversal begins an edge traversal at a From/To endpoint
+// vertex so the query walks the vertex's adjacency list instead of scanning
+// every edge. With both endpoints set, edges leaving the From vertex are
+// filtered to those arriving at the To vertex.
+func (q *Query[T]) startEndpointTraversal() *gremlingo.GraphTraversal {
+	switch {
+	case q.fromVertexID != nil && q.toVertexID != nil:
+		return q.db.g.V(q.fromVertexID).
+			OutE().
+			Where(anonymousTraversal.InV().HasId(q.toVertexID))
+	case q.fromVertexID != nil:
+		return q.db.g.V(q.fromVertexID).OutE()
+	default:
+		return q.db.g.V(q.toVertexID).InE()
+	}
 }
 
 func (q *Query[T]) doOrderSkipRange(query *gremlingo.GraphTraversal) *gremlingo.GraphTraversal {

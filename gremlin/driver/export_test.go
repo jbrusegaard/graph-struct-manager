@@ -45,7 +45,7 @@ func StructToMapForTest(value any) (map[string]any, error) {
 }
 
 func GetLabelFromVertexForTest(value gsmtypes.VertexType) string {
-	return getLabelFromVertex(value)
+	return getLabelFromValue(value)
 }
 
 func ValidateStructPointerWithAnonymousVertexForTest(value any) error {

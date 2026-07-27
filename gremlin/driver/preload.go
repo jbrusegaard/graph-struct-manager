@@ -1,6 +1,7 @@
 package driver
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"slices"
@@ -66,6 +67,10 @@ func (q *Query[T]) PreloadDedup(fieldPaths ...string) *Query[T] {
 }
 
 func (q *Query[T]) preload(dedup bool, fieldPaths ...string) *Query[T] {
+	if q.isEdgeQuery {
+		q.err = errors.New("preload: not supported on edge queries")
+		return q
+	}
 	modelType := reflect.TypeFor[T]()
 	if modelType.Kind() == reflect.Pointer {
 		modelType = modelType.Elem()

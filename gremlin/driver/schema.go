@@ -49,6 +49,10 @@ type typeSchema struct {
 	// refreshes on create/save/update. Empty when the type disables
 	// tracking via gsmtypes.LastModifiedPropertyType.
 	lastModifiedProperty string
+	// isEdge reports whether the type models an edge (implements
+	// gsmtypes.EdgeType). Queries for edge types traverse g.E() instead
+	// of g.V().
+	isEdge bool
 }
 
 // schemaFor returns the cached schema for rt, computing it on first use.
@@ -82,6 +86,7 @@ func buildSchema(rt reflect.Type) *typeSchema {
 	}
 	schema.zeroLabel = zeroValueLabel(rt, schema.snakeName)
 	schema.lastModifiedProperty = resolveLastModifiedProperty(rt)
+	schema.isEdge = typeImplementsEdgeType(rt)
 	if rt.Kind() != reflect.Struct {
 		return schema
 	}
@@ -93,6 +98,14 @@ func buildSchema(rt reflect.Type) *typeSchema {
 	schema.unloadFields = collectUnloadFields(rt, nil)
 	schema.mapFields = collectMapFields(rt, nil)
 	return schema
+}
+
+// typeImplementsEdgeType reports whether rt (or its pointer) implements
+// gsmtypes.EdgeType, i.e. whether it models an edge rather than a vertex.
+func typeImplementsEdgeType(rt reflect.Type) bool {
+	// reflect.New covers both value and pointer receiver implementations.
+	_, ok := reflect.New(rt).Interface().(gsmtypes.EdgeType)
+	return ok
 }
 
 // resolveLastModifiedProperty returns the property the driver automatically
