@@ -4,7 +4,6 @@ go 1.25
 
 require (
 	github.com/apache/tinkerpop/gremlin-go/v3 v3.7.4
-	github.com/gobeam/stringy v0.0.7
 	github.com/google/uuid v1.6.0
 )
 
