@@ -2,9 +2,10 @@ package driver
 
 import (
 	"reflect"
+	"strings"
 	"sync"
+	"unicode"
 
-	"github.com/gobeam/stringy"
 	"github.com/jbrusegaard/graph-struct-manager/gsmtypes"
 )
 
@@ -87,7 +88,7 @@ func (s *typeSchema) mapFieldByTag(tagName string) (*fieldSchema, bool) {
 
 func buildSchema(rt reflect.Type) *typeSchema {
 	schema := &typeSchema{
-		snakeName:          stringy.New(rt.Name()).SnakeCase().ToLower(),
+		snakeName:          toSnakeCase(rt.Name()),
 		implementsUnmapped: typeImplementsUnmappedProperties(rt),
 	}
 	schema.zeroLabel = zeroValueLabel(rt, schema.snakeName)
@@ -313,4 +314,17 @@ func childIndex(parent []int, i int) []int {
 	copy(index, parent)
 	index[len(parent)] = i
 	return index
+}
+
+// toSnakeCase converts a CamelCase or PascalCase string to snake_case.
+// e.g., "Person" -> "person", "UserProfile" -> "user_profile"
+func toSnakeCase(s string) string {
+	var result strings.Builder
+	for i, r := range s {
+		if i > 0 && unicode.IsUpper(r) {
+			result.WriteRune('_')
+		}
+		result.WriteRune(unicode.ToLower(r))
+	}
+	return result.String()
 }
