@@ -63,6 +63,7 @@ func updateVertex[T any](db *GremlinDriver, value *T) error {
 		query = query.SideEffect(anonymousTraversal.Properties(slicePropertyNames...).Drop())
 	}
 	query = handlePropertyUpdate(db, mapValue, query)
+	db.logTraversal(query)
 	_, err = query.Next()
 	if err != nil {
 		return err
@@ -104,7 +105,9 @@ func createVertex[T any](db *GremlinDriver, value *T) error {
 	if hasID {
 		query = query.Property(gremlingo.T.Id, id)
 	}
-	vertexID, err := query.Id().Next()
+	query = query.Id()
+	db.logTraversal(query)
+	vertexID, err := query.Next()
 	if err != nil {
 		return err
 	}

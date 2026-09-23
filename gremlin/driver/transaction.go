@@ -74,6 +74,7 @@ func (driver *GremlinDriver) Begin() (*GremlinDriver, error) {
 		logger:      driver.logger,
 		dbDriver:    driver.dbDriver,
 		idGenerator: driver.idGenerator,
+		debug:       driver.debug,
 		tx:          tx,
 	}, nil
 }

@@ -39,6 +39,7 @@ func (rq *RawQuery) ToList() ([]*gremlingo.Result, error) {
 	if rq.traversal == nil {
 		rq.traversal = rq.db.g.V().HasLabel(rq.label)
 	}
+	rq.db.logTraversal(rq.traversal)
 	results, err := rq.traversal.ToList()
 	if err != nil {
 		return nil, err
@@ -51,7 +52,9 @@ func (rq *RawQuery) Next() (*gremlingo.Result, error) {
 	if rq.traversal == nil {
 		rq.traversal = rq.db.g.V().HasLabel(rq.label)
 	}
-	result, err := rq.traversal.ElementMap().Next()
+	traversal := rq.traversal.ElementMap()
+	rq.db.logTraversal(traversal)
+	result, err := traversal.Next()
 	if err != nil {
 		return nil, err
 	}
