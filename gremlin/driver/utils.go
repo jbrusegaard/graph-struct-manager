@@ -162,17 +162,17 @@ func unloadSchemaFields(
 // Non-addressable values with pointer-receiver implementations are copied so
 // the method can be invoked.
 func serializeGremlinValue(rv reflect.Value) (string, error) {
-	if serializer, ok := rv.Interface().(gsmtypes.SerializerType); ok {
+	if serializer, ok := reflect.TypeAssert[gsmtypes.SerializerType](rv); ok {
 		return serializer.SerializeGremlinValue()
 	}
 	if rv.CanAddr() {
-		if serializer, ok := rv.Addr().Interface().(gsmtypes.SerializerType); ok {
+		if serializer, ok := reflect.TypeAssert[gsmtypes.SerializerType](rv.Addr()); ok {
 			return serializer.SerializeGremlinValue()
 		}
 	}
 	ptr := reflect.New(rv.Type())
 	ptr.Elem().Set(rv)
-	serializer, ok := ptr.Interface().(gsmtypes.SerializerType)
+	serializer, ok := reflect.TypeAssert[gsmtypes.SerializerType](ptr)
 	if !ok {
 		return "", fmt.Errorf("type %s does not implement gsmtypes.SerializerType", rv.Type())
 	}
@@ -211,7 +211,7 @@ func deserializeGremlinValue(field reflect.Value, value any) error {
 	if field.Kind() == reflect.Pointer {
 		target = reflect.New(field.Type().Elem()).Elem()
 	}
-	deserializer, ok := target.Addr().Interface().(gsmtypes.DeserializerType)
+	deserializer, ok := reflect.TypeAssert[gsmtypes.DeserializerType](target.Addr())
 	if !ok {
 		return fmt.Errorf("type %s does not implement gsmtypes.DeserializerType", field.Type())
 	}

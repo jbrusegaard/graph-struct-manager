@@ -111,7 +111,7 @@ func buildSchema(rt reflect.Type) *typeSchema {
 // gsmtypes.EdgeType, i.e. whether it models an edge rather than a vertex.
 func typeImplementsEdgeType(rt reflect.Type) bool {
 	// reflect.New covers both value and pointer receiver implementations.
-	_, ok := reflect.New(rt).Interface().(gsmtypes.EdgeType)
+	_, ok := reflect.TypeAssert[gsmtypes.EdgeType](reflect.New(rt))
 	return ok
 }
 
@@ -150,7 +150,7 @@ func typeImplementsDeserializer(rt reflect.Type) bool {
 // gsmtypes.LastModified property.
 func resolveLastModifiedProperty(rt reflect.Type) string {
 	// reflect.New covers both value and pointer receiver implementations.
-	if tracker, ok := reflect.New(rt).Interface().(gsmtypes.LastModifiedPropertyType); ok {
+	if tracker, ok := reflect.TypeAssert[gsmtypes.LastModifiedPropertyType](reflect.New(rt)); ok {
 		return tracker.LastModifiedProperty()
 	}
 	return gsmtypes.LastModified
@@ -160,7 +160,7 @@ func resolveLastModifiedProperty(rt reflect.Type) string {
 // custom Label() implementation over the snake-cased struct name.
 func zeroValueLabel(rt reflect.Type, snakeName string) string {
 	// reflect.New covers both value and pointer receiver Label methods.
-	if labeler, ok := reflect.New(rt).Interface().(gsmtypes.CustomLabelType); ok {
+	if labeler, ok := reflect.TypeAssert[gsmtypes.CustomLabelType](reflect.New(rt)); ok {
 		if label := labeler.Label(); label != "" {
 			return label
 		}
@@ -180,9 +180,7 @@ func collectGremlinTagFields(rt reflect.Type) []any { //nolint:gocognit
 	}
 
 	fields := make([]any, 0)
-	for i := range rt.NumField() {
-		field := rt.Field(i)
-
+	for field := range rt.Fields() {
 		if field.Anonymous {
 			anonymousType := field.Type
 			if anonymousType.Kind() == reflect.Pointer {

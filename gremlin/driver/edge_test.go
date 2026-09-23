@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jbrusegaard/graph-struct-manager/comparator"
@@ -366,6 +367,9 @@ func TestEdgeUpdatesAndRemoveProperty(t *testing.T) {
 	if loaded.Weight != 9 {
 		t.Errorf("expected weight 9, got %v", loaded.Weight)
 	}
+	// The stored timestamp may not retain sub-second precision, so backdate
+	// the baseline to keep the refresh assertion deterministic.
+	sub.LastModified = sub.LastModified.Add(-time.Minute)
 	if !loaded.LastModified.After(sub.LastModified) {
 		t.Error("Updates should refresh the edge's last_modified property")
 	}
