@@ -86,13 +86,6 @@ func (q *Query[T]) preload(dedup bool, fieldPaths ...string) *Query[T] {
 			q.err = err
 			return q
 		}
-		if dedup {
-			q.writeDebugString(".PreloadDedup(")
-		} else {
-			q.writeDebugString(".Preload(")
-		}
-		q.writeDebugString(fieldPath)
-		q.writeDebugString(")")
 		q.subTraversals[rootField] = traversal
 	}
 	return q
