@@ -18,10 +18,13 @@ const (
 )
 
 type GremlinDriver struct {
-	remoteConn  *gremlingo.DriverRemoteConnection
-	g           *gremlingo.GraphTraversalSource
-	logger      appLogger.Logger
-	dbDriver    DatabaseDriver
+	remoteConn *gremlingo.DriverRemoteConnection
+	g          *gremlingo.GraphTraversalSource
+	logger     appLogger.Logger
+	dbDriver   DatabaseDriver
+	// debug dumps each traversal before it runs, translated from the bytecode
+	// the Gremlin driver tracks. Set from GSM_DEBUG when the driver opens.
+	debug       bool
 	idGenerator func() any
 	// tx is non-nil when this driver is bound to an open transaction
 	tx *gremlingo.Transaction
@@ -92,6 +95,7 @@ func Open(url string, config ...Config) (*GremlinDriver, error) {
 		logger:      driverLogger,
 		dbDriver:    configStruct.Driver,
 		idGenerator: configStruct.IDGenerator,
+		debug:       debugEnabledFromEnv(),
 	}
 	return driver, nil
 }

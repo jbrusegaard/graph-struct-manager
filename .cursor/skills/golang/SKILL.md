@@ -47,7 +47,8 @@ Gremlin traversals.
 
 - Keep methods chainable and consistent with existing behavior (mutate query, return `*Query[T]`).
 - Use `comparator` constants for predicates; map them to Gremlin `P`/`TextP` consistently.
-- Preserve debug string building and `GSM_DEBUG` behavior when adding query steps.
+- Do not hand-build traversal strings for debugging; the dump is translated from Gremlin bytecode,
+  so new steps show up automatically.
 - `Range` is ignored when `Offset` is set; maintain this behavior and warnings.
 - `Take()` returns the first result; `ID()` performs fast ID lookup using `HasLabel`.
 
@@ -61,7 +62,10 @@ Gremlin traversals.
 ## Logging and Diagnostics
 
 - Logging uses `log.InitializeLogger()` and `GSM_LOG_LEVEL`.
-- Query debugging uses `GSM_DEBUG=true` to emit generated traversal strings.
+- Query debugging (`GSM_DEBUG=true`, read when a driver opens) logs every executed traversal via
+  `GremlinDriver.logTraversal` in `gremlin/driver/debug.go`, translated from its bytecode.
+- Call `db.logTraversal(traversal)` immediately before executing a traversal, on the final traversal
+  (after valueMap/preload/order steps are applied).
 
 ## Error Handling
 

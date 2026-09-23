@@ -750,7 +750,11 @@ export NO_COLOR=1
 
 ### GSM_DEBUG
 
-When set to `true`, enables query debugging which logs the generated Gremlin query strings before execution. This is useful for troubleshooting and understanding what queries are being sent to the database.
+When set to `true`, every traversal GraphStructManager executes is logged beforehand — queries (`Find`/`Take`/`Count`/`ID`), creates, updates, property removals, deletes and raw label queries.
+
+The logged string is produced by the Gremlin driver's translator from the traversal bytecode the driver already tracks, so it matches what is sent to the server, including steps the library adds internally (`valueMap` projections, preloads, cardinality writes, last-modified stamps). This makes it the place to look when a query does not behave as expected.
+
+The variable is read when a driver is opened, so set it before calling `driver.Open`.
 
 **Example:**
 ```bash
@@ -759,7 +763,7 @@ export GSM_DEBUG=true
 
 **Output example:**
 ```
-INFO Running Query: V().HasLabel('test_vertex').Has('name', 'John').Limit(1).Next()
+INFO Running Query: g.V().hasLabel('person').has('name','John').limit(1).valueMap(true,'id','created_at').by(choose(count(local).is(eq(1)),unfold(),identity()))
 ```
 
 ## Query Builder Functions
