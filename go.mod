@@ -1,6 +1,6 @@
 module github.com/jbrusegaard/graph-struct-manager
 
-go 1.25
+go 1.27
 
 require (
 	github.com/apache/tinkerpop/gremlin-go/v3 v3.7.4

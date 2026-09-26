@@ -180,9 +180,7 @@ func collectGremlinTagFields(rt reflect.Type) []any { //nolint:gocognit
 	}
 
 	fields := make([]any, 0)
-	for i := range rt.NumField() {
-		field := rt.Field(i)
-
+	for field := range rt.Fields() {
 		if field.Anonymous {
 			anonymousType := field.Type
 			if anonymousType.Kind() == reflect.Pointer {
