@@ -306,6 +306,13 @@ func assignValueTo(target reflect.Value, value any) bool {
 	valueType := reflect.TypeOf(value)
 	targetType := target.Type()
 
+	// Go turns a number into text as a UTF-8 code point, so an int64 property
+	// would land in a string field as "A" instead of "65". Gremlin text
+	// properties are strings, so a number does not fit a string field.
+	if targetType.Kind() == reflect.String && isNumericKind(valueType) {
+		return false
+	}
+
 	// Direct conversions win, and cover interface targets whose method set
 	// the gremlin value satisfies.
 	if valueType.ConvertibleTo(targetType) {
@@ -324,6 +331,18 @@ func assignValueTo(target reflect.Value, value any) bool {
 	}
 
 	return false
+}
+
+// isNumericKind reports whether rt is one of Go's number types.
+func isNumericKind(rt reflect.Type) bool {
+	switch rt.Kind() { //nolint:exhaustive // only the number kinds matter
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+		reflect.Float32, reflect.Float64:
+		return true
+	default:
+		return false
+	}
 }
 
 // assignThroughPointer assigns value to the value pointed at by target. A nil
@@ -349,7 +368,7 @@ func assignThroughPointer(target reflect.Value, value any) bool {
 // assignSliceTarget fills a slice target from a gremlin value: a sequence
 // folds entry by entry, a single value becomes a one element slice (a multi
 // property returned with one stored value). The target is left untouched when
-// any entry cannot be converted.
+// any entry, a null entry included, cannot be assigned.
 func assignSliceTarget(target reflect.Value, value any) bool {
 	valueType := reflect.TypeOf(value)
 	if valueType.Kind() != reflect.Slice {
@@ -364,11 +383,7 @@ func assignSliceTarget(target reflect.Value, value any) bool {
 	source := reflect.ValueOf(value)
 	slice := reflect.MakeSlice(target.Type(), source.Len(), source.Len())
 	for i := range source.Len() {
-		element := source.Index(i)
-		if !element.IsValid() {
-			continue // Gremlin null entries keep the zero value
-		}
-		if !assignValueTo(slice.Index(i), element.Interface()) {
+		if !assignValueTo(slice.Index(i), source.Index(i).Interface()) {
 			return false
 		}
 	}

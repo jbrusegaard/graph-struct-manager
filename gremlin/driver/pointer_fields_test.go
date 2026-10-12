@@ -51,6 +51,14 @@ type testVertexWithOmitEmptyPointers struct {
 	Plain  string    `json:"plain"  gremlin:"plain,omitempty"`
 }
 
+// testVertexWithOmitEmptySerializer marks a custom serializer field with
+// omitempty. testAttributes comes from serializer_test.go and serializes to
+// JSON, so the tests can tell "skipped" from "serialized".
+type testVertexWithOmitEmptySerializer struct {
+	gsmtypes.Vertex
+	Attributes *testAttributes `gremlin:"attributes,omitempty"`
+}
+
 func optionalFieldsResult() *gremlingo.Result {
 	return &gremlingo.Result{
 		Data: map[any]any{
@@ -294,4 +302,71 @@ func TestStructToMapOmitEmptyPointerFields(t *testing.T) {
 			}
 		},
 	)
+	t.Run(
+		"TestNilSerializerPointerWithOmitEmptyIsSkipped", func(t *testing.T) {
+			t.Parallel()
+			mapValue, err := driver.StructToMapForTest(&testVertexWithOmitEmptySerializer{})
+			if err != nil {
+				t.Fatalf("Error converting struct to map: %v", err)
+			}
+			if _, ok := mapValue["attributes"]; ok {
+				t.Errorf(
+					"nil serializer pointer should be skipped, got %v",
+					mapValue["attributes"],
+				)
+			}
+		},
+	)
+	t.Run(
+		"TestPointerToZeroSerializerWithOmitEmptyIsSerialized", func(t *testing.T) {
+			t.Parallel()
+			empty := testAttributes{}
+			mapValue, err := driver.StructToMapForTest(
+				&testVertexWithOmitEmptySerializer{Attributes: &empty},
+			)
+			if err != nil {
+				t.Fatalf("Error converting struct to map: %v", err)
+			}
+			// A set pointer is serialized even when the value behind it is empty.
+			if got, ok := mapValue["attributes"].(string); !ok || got != "{}" {
+				t.Errorf(
+					"pointer to a zero serializer should serialize, got %T %v",
+					mapValue["attributes"], mapValue["attributes"],
+				)
+			}
+		},
+	)
+}
+
+// testVertexWithMismatchedProperties tags fields with properties stored as a
+// type the field cannot hold, which must leave every field untouched.
+type testVertexWithMismatchedProperties struct {
+	gsmtypes.Vertex
+	TitleFromNumber *string `gremlin:"title_from_number"`
+	TextToNumber    *int    `gremlin:"text_to_number"`
+	Plain           string  `gremlin:"plain"`
+}
+
+func TestMismatchedPropertyTypesAreNotAssigned(t *testing.T) {
+	t.Parallel()
+	var vertex testVertexWithMismatchedProperties
+	result := &gremlingo.Result{Data: map[any]any{
+		"title_from_number": int64(65),
+		"text_to_number":    "abc",
+		"plain":             int64(65),
+	}}
+	if err := driver.UnloadGremlinResultIntoStruct(&vertex, result); err != nil {
+		t.Fatalf("Error unloading struct: %v", err)
+	}
+	// Go converts a number to text as a UTF-8 code point, which would store
+	// "A" for the int64 property 65 instead of leaving the field alone.
+	if vertex.TitleFromNumber != nil {
+		t.Errorf("numeric property should leave *string nil, got %q", *vertex.TitleFromNumber)
+	}
+	if vertex.TextToNumber != nil {
+		t.Errorf("text property should leave *int nil, got %v", *vertex.TextToNumber)
+	}
+	if vertex.Plain != "" {
+		t.Errorf("numeric property should leave string field empty, got %q", vertex.Plain)
+	}
 }

@@ -206,6 +206,12 @@ func collectGremlinTagFields(rt reflect.Type) []any { //nolint:gocognit
 			continue
 		}
 
+		// Stacked pointer fields are not properties, so the query must not
+		// ask the graph for them.
+		if isNestedPointerType(field.Type) {
+			continue
+		}
+
 		tagParts := parseGremlinTag(gremlinTag)
 		if tagParts.unmapped || tagParts.name == "" || tagParts.name == "-" {
 			continue
@@ -238,8 +244,8 @@ func collectUnloadFields(rt reflect.Type, index []int) []fieldSchema {
 
 // isNestedPointerType reports whether a property field stacks more than one
 // pointer (a **T field). Optional properties support exactly one pointer
-// level, so such a field is not a gremlin property at all: it is neither
-// written nor loaded.
+// level, so such a field is not a gremlin property at all: it is never
+// selected or written, and loading refuses it in assignThroughPointer.
 func isNestedPointerType(rt reflect.Type) bool {
 	return rt.Kind() == reflect.Pointer && rt.Elem().Kind() == reflect.Pointer
 }
@@ -253,9 +259,6 @@ func unloadFieldSchema(field reflect.StructField, index []int) (fieldSchema, boo
 	subTraversalTag := field.Tag.Get(gsmtypes.GremlinSubTraversalTag)
 	tagName := field.Tag.Get(gsmtypes.GremlinTag)
 	if tagName != "" {
-		if isNestedPointerType(field.Type) {
-			return fieldSchema{}, false
-		}
 		tagParts := parseGremlinTag(tagName)
 		if tagParts.unmapped {
 			return fieldSchema{}, false
