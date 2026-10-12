@@ -236,6 +236,14 @@ func collectUnloadFields(rt reflect.Type, index []int) []fieldSchema {
 	return fields
 }
 
+// isNestedPointerType reports whether a property field stacks more than one
+// pointer (a **T field). Optional properties support exactly one pointer
+// level, so such a field is not a gremlin property at all: it is neither
+// written nor loaded.
+func isNestedPointerType(rt reflect.Type) bool {
+	return rt.Kind() == reflect.Pointer && rt.Elem().Kind() == reflect.Pointer
+}
+
 func unloadFieldSchema(field reflect.StructField, index []int) (fieldSchema, bool) {
 	// gremlinEdge fields are loaded via Preload and keyed by the Go field name.
 	if field.Tag.Get(gsmtypes.GremlinEdgeTag) != "" {
@@ -245,6 +253,9 @@ func unloadFieldSchema(field reflect.StructField, index []int) (fieldSchema, boo
 	subTraversalTag := field.Tag.Get(gsmtypes.GremlinSubTraversalTag)
 	tagName := field.Tag.Get(gsmtypes.GremlinTag)
 	if tagName != "" {
+		if isNestedPointerType(field.Type) {
+			return fieldSchema{}, false
+		}
 		tagParts := parseGremlinTag(tagName)
 		if tagParts.unmapped {
 			return fieldSchema{}, false
@@ -287,6 +298,12 @@ func collectMapFields(rt reflect.Type, index []int) []fieldSchema {
 
 		gremlinTag := field.Tag.Get(gsmtypes.GremlinTag)
 		if gremlinTag == "" || gremlinTag == "-" || field.PkgPath != "" {
+			continue
+		}
+
+		// Optional properties are a single pointer level deep, so a stacked
+		// pointer field is not a property and is never written.
+		if isNestedPointerType(field.Type) {
 			continue
 		}
 

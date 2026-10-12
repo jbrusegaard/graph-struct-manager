@@ -265,9 +265,12 @@ func selectGremlinKey(tagName, subTraversalTag string, stringMap map[string]any)
 }
 
 // indirectValue walks pointer levels until it reaches a non-pointer value,
-// allocating nil pointers on the way so callers can assign through them. An
-// invalid value is returned when a nil pointer cannot be allocated because
-// it is not settable.
+// allocating nil pointers on the way so callers can assign through them. It
+// covers the destination the generic query code builds for a model type
+// declared as a pointer (NewQuery[*User] unloads through a **User) and is
+// unrelated to optional property fields, which support one pointer level. An
+// invalid value is returned when a nil pointer cannot be allocated because it
+// is not settable.
 func indirectValue(v reflect.Value) reflect.Value {
 	for v.Kind() == reflect.Pointer {
 		if v.IsNil() {
@@ -327,6 +330,11 @@ func assignValueTo(target reflect.Value, value any) bool {
 // pointer is allocated only when value fits the pointed-to type, so a property
 // that cannot be stored leaves the field untouched.
 func assignThroughPointer(target reflect.Value, value any) bool {
+	// Optional properties are a single pointer level deep: a stacked pointer
+	// holds no value a gremlin property can be assigned to.
+	if target.Type().Elem().Kind() == reflect.Pointer {
+		return false
+	}
 	if !target.IsNil() {
 		return assignValueTo(target.Elem(), value)
 	}
@@ -488,16 +496,13 @@ func structToMap(
 		}
 
 		// Optional fields are stored as the value they point at; an unset
-		// pointer anywhere in the chain means the field has no value.
-		for fieldValue.Kind() == reflect.Pointer {
+		// pointer means the field has no value. Only a single pointer level is
+		// supported, and the schema leaves stacked pointer fields out.
+		if fieldValue.Kind() == reflect.Pointer {
 			if fieldValue.IsNil() {
-				fieldValue = reflect.Value{}
-				break
+				continue
 			}
 			fieldValue = fieldValue.Elem()
-		}
-		if !fieldValue.IsValid() {
-			continue
 		}
 
 		if fieldSchema.isSerializer {

@@ -28,8 +28,9 @@ type testVertexWithScalarField struct {
 	Name string `json:"name" gremlin:"name"`
 }
 
-// testVertexWithNestedPointerField stores its value behind a chain of
-// pointers, which structToMap must follow to the value it points at.
+// testVertexWithNestedPointerField declares a stacked pointer property.
+// Optional properties support a single pointer level, so the field is not a
+// gremlin property: it is neither written nor loaded.
 type testVertexWithNestedPointerField struct {
 	gsmtypes.Vertex
 	Value **string `json:"value" gremlin:"value"`
@@ -141,6 +142,9 @@ func TestUnloadPointerFields(t *testing.T) {
 	t.Run(
 		"TestPointerToPointerTargetIsLoaded", func(t *testing.T) {
 			t.Parallel()
+			// The destination shape NewQuery[*Model] unloads through: a nil
+			// model pointer the driver allocates. This is not field-level
+			// support for stacked pointers.
 			var vertex *testVertexWithOptionalFields
 			if err := driver.UnloadGremlinResultIntoStruct(
 				&vertex,
@@ -182,7 +186,7 @@ func TestUnloadPointerFields(t *testing.T) {
 		},
 	)
 	t.Run(
-		"TestStructToMapFollowsPointerChains", func(t *testing.T) {
+		"TestStructToMapIgnoresNestedPointerFields", func(t *testing.T) {
 			t.Parallel()
 			storedValue := "stored"
 			pointerToValue := &storedValue
@@ -191,16 +195,27 @@ func TestUnloadPointerFields(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Error converting struct to map: %v", err)
 			}
-			got, ok := mapValue["value"].(string)
-			if !ok || got != "stored" {
+			if _, ok := mapValue["value"]; ok {
 				t.Errorf(
-					"value should be the pointed-to string, got %T %v",
+					"stacked pointer field should not be written, got %T %v",
 					mapValue["value"],
 					mapValue["value"],
 				)
 			}
 		},
 	)
+}
+
+func TestNestedPointerFieldIsNotLoaded(t *testing.T) {
+	t.Parallel()
+	var vertex testVertexWithNestedPointerField
+	result := &gremlingo.Result{Data: map[any]any{"value": "stored"}}
+	if err := driver.UnloadGremlinResultIntoStruct(&vertex, result); err != nil {
+		t.Fatalf("Error unloading struct: %v", err)
+	}
+	if vertex.Value != nil {
+		t.Errorf("stacked pointer field should stay untouched, got %v", *vertex.Value)
+	}
 }
 
 func TestStructToMapOmitEmptyPointerFields(t *testing.T) {

@@ -160,6 +160,8 @@ type User struct {
 - Writing skips `nil` pointers and stores what a non-nil pointer points at
 - `omitempty` on a pointer only skips a `nil` pointer, so `&false`, `&0`, and `&""` are still
   written
+- One pointer level only: use `*string`, not `**string`. A field with stacked pointers is not
+  treated as a property at all — it is never written and never loaded
 
 ### Custom Property Serialization
 
