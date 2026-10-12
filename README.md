@@ -109,7 +109,7 @@ type User struct {
 - Empty strings (`""`)
 - Zero numbers (`0`, `0.0`)
 - False booleans (`false`)
-- Nil pointers
+- Nil pointers (a pointer to a zero value, e.g. `&false`, counts as set and is written)
 - Empty slices, arrays, and maps
 - Any type with a zero value
 
