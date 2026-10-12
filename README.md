@@ -113,6 +113,11 @@ type User struct {
 - Empty slices, arrays, and maps
 - Any type with a zero value
 
+Pointers are checked before they are dereferenced: `omitempty` skips a pointer only when it is
+`nil`. A non-nil pointer to a zero value (`&false`, `&0`, `&""`) means "set to the zero value" and
+is written to the graph. Use a pointer field when a stored zero value has to be distinguishable
+from an absent property.
+
 **When to use omitempty:**
 - Optional fields that should not create properties in the graph when empty
 - Reducing graph storage by not storing empty/default values
@@ -153,6 +158,8 @@ type User struct {
 - A pointer stays `nil` when the property is missing, stored as `null`, or stored with a type the
   pointed-to value cannot hold (for example a string property in an `*int` field)
 - Writing skips `nil` pointers and stores what a non-nil pointer points at
+- `omitempty` on a pointer only skips a `nil` pointer, so `&false`, `&0`, and `&""` are still
+  written
 
 ### Custom Property Serialization
 

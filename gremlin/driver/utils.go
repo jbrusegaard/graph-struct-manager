@@ -442,6 +442,17 @@ func getLabelFromValue(value any) string {
 	return schemaFor(reflect.TypeOf(value)).zeroLabel
 }
 
+// isEmptyField reports whether a struct field holds no value for the purpose
+// of the omitempty tag option. A pointer is empty only when it is nil, so a
+// pointer to a zero value stays an explicitly set value; every other kind is
+// empty when it holds its zero value.
+func isEmptyField(field reflect.Value) bool {
+	if field.Kind() == reflect.Pointer {
+		return field.IsNil()
+	}
+	return field.IsZero()
+}
+
 // structToMap converts a struct to a map[string]any and returns the label and the map
 // the label is determined by calling Label() method if available, otherwise the name of the struct converted to snake case
 // the map is the map of the struct
@@ -468,6 +479,14 @@ func structToMap(
 		fieldSchema := &schema.mapFields[i]
 		fieldValue := rv.FieldByIndex(fieldSchema.index)
 
+		// If omitempty is set, skip fields that carry no value. This runs on
+		// the field as declared, before dereferencing, so a pointer is empty
+		// only when it is nil: &false, &"" or &0 was set deliberately and is
+		// written like any other value.
+		if fieldSchema.omitEmpty && isEmptyField(fieldValue) {
+			continue
+		}
+
 		// Optional fields are stored as the value they point at; an unset
 		// pointer anywhere in the chain means the field has no value.
 		for fieldValue.Kind() == reflect.Pointer {
@@ -478,11 +497,6 @@ func structToMap(
 			fieldValue = fieldValue.Elem()
 		}
 		if !fieldValue.IsValid() {
-			continue
-		}
-
-		// If omitempty is set, skip zero values
-		if fieldSchema.omitEmpty && fieldValue.IsZero() {
 			continue
 		}
 

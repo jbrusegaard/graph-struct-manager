@@ -35,6 +35,21 @@ type testVertexWithNestedPointerField struct {
 	Value **string `json:"value" gremlin:"value"`
 }
 
+// testVertexWithOmitEmptyPointers pairs pointer fields with omitempty. A nil
+// pointer is unset and omitted; a pointer to a zero value is an explicit
+// value and must still be written, which is why the omitempty check happens
+// before the pointer is dereferenced.
+type testVertexWithOmitEmptyPointers struct {
+	gsmtypes.Vertex
+	Name   *string   `json:"name"   gremlin:"name,omitempty"`
+	Active *bool     `json:"active" gremlin:"active,omitempty"`
+	Count  *int      `json:"count"  gremlin:"count,omitempty"`
+	Ratio  *float64  `json:"ratio"  gremlin:"ratio,omitempty"`
+	Tags   *[]string `json:"tags"   gremlin:"tags,omitempty"`
+	Nick   *string   `json:"nick"   gremlin:"nick"`
+	Plain  string    `json:"plain"  gremlin:"plain,omitempty"`
+}
+
 func optionalFieldsResult() *gremlingo.Result {
 	return &gremlingo.Result{
 		Data: map[any]any{
@@ -183,6 +198,84 @@ func TestUnloadPointerFields(t *testing.T) {
 					mapValue["value"],
 					mapValue["value"],
 				)
+			}
+		},
+	)
+}
+
+func TestStructToMapOmitEmptyPointerFields(t *testing.T) {
+	t.Parallel()
+	t.Run(
+		"TestNilPointersWithOmitEmptyAreSkipped", func(t *testing.T) {
+			t.Parallel()
+			mapValue, err := driver.StructToMapForTest(&testVertexWithOmitEmptyPointers{})
+			if err != nil {
+				t.Fatalf("Error converting struct to map: %v", err)
+			}
+			for _, key := range []string{"name", "active", "count", "ratio", "tags"} {
+				if _, ok := mapValue[key]; ok {
+					t.Errorf("nil pointer field %q should be skipped, got %v", key, mapValue[key])
+				}
+			}
+		},
+	)
+	t.Run(
+		"TestPointersToZeroValuesWithOmitEmptyAreKept", func(t *testing.T) {
+			t.Parallel()
+			name := ""
+			active := false
+			count := 0
+			ratio := 0.0
+			tags := []string{}
+			vertex := &testVertexWithOmitEmptyPointers{
+				Name:   &name,
+				Active: &active,
+				Count:  &count,
+				Ratio:  &ratio,
+				Tags:   &tags,
+			}
+			mapValue, err := driver.StructToMapForTest(vertex)
+			if err != nil {
+				t.Fatalf("Error converting struct to map: %v", err)
+			}
+			// A set pointer is a value the graph must receive, even when the
+			// value it points at is the zero value for its type.
+			if got, ok := mapValue["active"].(bool); !ok || got != false {
+				t.Errorf("active should be stored as false, got %T %v",
+					mapValue["active"], mapValue["active"])
+			}
+			for _, key := range []string{"name", "count", "ratio", "tags"} {
+				if _, ok := mapValue[key]; !ok {
+					t.Errorf("pointer to zero value %q should be stored, got missing", key)
+				}
+			}
+		},
+	)
+	t.Run(
+		"TestZeroValueWithoutOmitEmptyIsKept", func(t *testing.T) {
+			t.Parallel()
+			nick := ""
+			vertex := &testVertexWithOmitEmptyPointers{Nick: &nick}
+			mapValue, err := driver.StructToMapForTest(vertex)
+			if err != nil {
+				t.Fatalf("Error converting struct to map: %v", err)
+			}
+			if got, ok := mapValue["nick"].(string); !ok || got != "" {
+				t.Errorf("nick without omitempty should be stored as empty, got %T %v",
+					mapValue["nick"], mapValue["nick"])
+			}
+		},
+	)
+	t.Run(
+		"TestZeroValueNonPointerWithOmitEmptyIsSkipped", func(t *testing.T) {
+			t.Parallel()
+			mapValue, err := driver.StructToMapForTest(&testVertexWithOmitEmptyPointers{})
+			if err != nil {
+				t.Fatalf("Error converting struct to map: %v", err)
+			}
+			// Non-pointer fields keep the usual zero-value meaning of omitempty.
+			if _, ok := mapValue["plain"]; ok {
+				t.Errorf("empty non-pointer field should be skipped, got %v", mapValue["plain"])
 			}
 		},
 	)
