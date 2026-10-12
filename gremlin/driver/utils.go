@@ -54,7 +54,8 @@ func UnloadGremlinResultIntoStruct(
 }
 
 // unloadGremlinMapIntoStruct unloads a gremlin result map into a struct.
-// v must be a non-nil pointer to a struct with gremlin tags on the fields.
+// v must be a non-nil pointer, or chain of pointers, to a struct with gremlin
+// tags on the fields. Nil pointers in the chain are allocated.
 func unloadGremlinMapIntoStruct(v any, mapResult map[any]any) error {
 	// make string map
 	stringMap := make(map[string]any, len(mapResult))
@@ -75,12 +76,21 @@ func unloadGremlinMapIntoStruct(v any, mapResult map[any]any) error {
 		return errors.New("v must be a non-nil pointer")
 	}
 
-	elem := rv.Elem()
+	// Follow the whole pointer chain so nested pointers, the shape generic
+	// code produces for model types declared as pointers, reach the struct.
+	elem := indirectValue(rv)
+	if !elem.IsValid() {
+		return errors.New("v must be a non-nil pointer")
+	}
 	if elem.Kind() != reflect.Struct {
 		return errors.New("v must point to a struct")
 	}
 
-	unmappedCollector, collectUnmapped := v.(gsmtypes.UnmappedPropertiesType)
+	// Resolve unmapped collection on the struct pointer so it is found
+	// regardless of how many pointer levels v carried.
+	unmappedCollector, collectUnmapped := reflect.TypeAssert[gsmtypes.UnmappedPropertiesType](
+		elem.Addr(),
+	)
 	var usedKeys map[string]struct{}
 	if collectUnmapped {
 		usedKeys = make(map[string]struct{}, len(stringMap))
@@ -254,36 +264,108 @@ func selectGremlinKey(tagName, subTraversalTag string, stringMap map[string]any)
 	return "", false
 }
 
+// indirectValue walks pointer levels until it reaches a non-pointer value,
+// allocating nil pointers on the way so callers can assign through them. An
+// invalid value is returned when a nil pointer cannot be allocated because
+// it is not settable.
+func indirectValue(v reflect.Value) reflect.Value {
+	for v.Kind() == reflect.Pointer {
+		if v.IsNil() {
+			if !v.CanSet() {
+				return reflect.Value{}
+			}
+			v.Set(reflect.New(v.Type().Elem()))
+		}
+		v = v.Elem()
+	}
+	return v
+}
+
 func setFieldFromValue(field reflect.Value, value any) {
 	// Gremlin results are external data; a nil property value has nothing
 	// to assign and would panic the reflect conversions below.
 	if value == nil {
 		return
 	}
-	// Assign a Gremlin value into a field, handling slice conversions.
-	gType := reflect.TypeOf(value)
+	assignValueTo(field, value)
+}
 
-	switch {
-	case gType.ConvertibleTo(field.Type()):
-		field.Set(reflect.ValueOf(value).Convert(field.Type()))
-	case gType.Kind() == reflect.Slice:
-		strSlice := value.([]any) //nolint:errcheck // we already validated via reflect type check
-		slice := reflect.MakeSlice(
-			field.Type(), len(strSlice), len(strSlice),
-		)
-		for i, v := range strSlice {
-			slice.Index(i).Set(reflect.ValueOf(v).Convert(field.Type().Elem()))
-		}
-		field.Set(slice)
-	case field.Type().Kind() == reflect.Slice && gType.ConvertibleTo(field.Type().Elem()):
-		// Handle case where field is a slice but gremlin result is a single value
-		// Create a slice with one element
-		slice := reflect.MakeSlice(field.Type(), 1, 1)
-		slice.Index(0).Set(
-			reflect.ValueOf(value).Convert(field.Type().Elem()),
-		)
-		field.Set(slice)
+// assignValueTo assigns a Gremlin property value into target, which must be
+// settable. Pointer targets are assigned through the value they point at:
+// the gremlin value is checked against the pointed-to type and a nil pointer
+// is allocated only when the value actually fits, so optional (*T) fields
+// load like their value counterparts and stay nil otherwise. It reports
+// whether the value was assigned.
+func assignValueTo(target reflect.Value, value any) bool {
+	if value == nil {
+		return false
 	}
+	valueType := reflect.TypeOf(value)
+	targetType := target.Type()
+
+	// Direct conversions win, and cover interface targets whose method set
+	// the gremlin value satisfies.
+	if valueType.ConvertibleTo(targetType) {
+		target.Set(reflect.ValueOf(value).Convert(targetType))
+		return true
+	}
+
+	// Pointers are assigned through the value they point to.
+	if targetType.Kind() == reflect.Pointer {
+		return assignThroughPointer(target, value)
+	}
+
+	// Slice targets fold gremlin sequences and single values.
+	if targetType.Kind() == reflect.Slice {
+		return assignSliceTarget(target, value)
+	}
+
+	return false
+}
+
+// assignThroughPointer assigns value to the value pointed at by target. A nil
+// pointer is allocated only when value fits the pointed-to type, so a property
+// that cannot be stored leaves the field untouched.
+func assignThroughPointer(target reflect.Value, value any) bool {
+	if !target.IsNil() {
+		return assignValueTo(target.Elem(), value)
+	}
+	element := reflect.New(target.Type().Elem()).Elem()
+	if !assignValueTo(element, value) {
+		return false
+	}
+	target.Set(element.Addr())
+	return true
+}
+
+// assignSliceTarget fills a slice target from a gremlin value: a sequence
+// folds entry by entry, a single value becomes a one element slice (a multi
+// property returned with one stored value). The target is left untouched when
+// any entry cannot be converted.
+func assignSliceTarget(target reflect.Value, value any) bool {
+	valueType := reflect.TypeOf(value)
+	if valueType.Kind() != reflect.Slice {
+		slice := reflect.MakeSlice(target.Type(), 1, 1)
+		if !assignValueTo(slice.Index(0), value) {
+			return false
+		}
+		target.Set(slice)
+		return true
+	}
+
+	source := reflect.ValueOf(value)
+	slice := reflect.MakeSlice(target.Type(), source.Len(), source.Len())
+	for i := range source.Len() {
+		element := source.Index(i)
+		if !element.IsValid() {
+			continue // Gremlin null entries keep the zero value
+		}
+		if !assignValueTo(slice.Index(i), element.Interface()) {
+			return false
+		}
+	}
+	target.Set(slice)
+	return true
 }
 
 // setEdgeFieldFromValue assigns preloaded related vertices into a gremlinEdge
@@ -386,14 +468,17 @@ func structToMap(
 		fieldSchema := &schema.mapFields[i]
 		fieldValue := rv.FieldByIndex(fieldSchema.index)
 
-		// Check if field is a pointer and is nil (unset)
-		if fieldValue.Kind() == reflect.Pointer {
+		// Optional fields are stored as the value they point at; an unset
+		// pointer anywhere in the chain means the field has no value.
+		for fieldValue.Kind() == reflect.Pointer {
 			if fieldValue.IsNil() {
-				// Skip unset pointer fields
-				continue
+				fieldValue = reflect.Value{}
+				break
 			}
-			// Dereference the pointer to get the actual value
 			fieldValue = fieldValue.Elem()
+		}
+		if !fieldValue.IsValid() {
+			continue
 		}
 
 		// If omitempty is set, skip zero values

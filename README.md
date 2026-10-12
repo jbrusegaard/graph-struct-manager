@@ -135,6 +135,25 @@ err := GSM.Create(db, &newUser)
 // (assuming other fields have omitempty)
 ```
 
+### Optional (pointer) Fields
+
+Model a property that may not exist on every vertex/edge as a pointer. A `nil` field means "not
+set": it is skipped when writing, and loading allocates it automatically.
+
+```go
+type User struct {
+    types.Vertex
+    Name  string  `gremlin:"name"`
+    Title *string `gremlin:"title"` // optional property
+}
+```
+
+- `Find` / `Take` / `ID` assign the pointed-to value, so `*string`, `*int`, `*[]string`, ... load
+  like their non-pointer counterparts; an already allocated pointer is updated in place
+- A pointer stays `nil` when the property is missing, stored as `null`, or stored with a type the
+  pointed-to value cannot hold (for example a string property in an `*int` field)
+- Writing skips `nil` pointers and stores what a non-nil pointer points at
+
 ### Custom Property Serialization
 
 Gremlin property values must be primitives, so types it cannot store natively (maps, nested
