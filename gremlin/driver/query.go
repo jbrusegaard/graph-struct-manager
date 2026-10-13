@@ -596,6 +596,15 @@ func (q *Query[T]) stampLastModified(
 // applyPropertyUpdate appends the Property steps for a single property to the
 // traversal. Multi-valued (slice) properties are dropped first so stale
 // elements don't survive the update.
+// Pointer values carry the value behind the pointer, matching the save path
+// (structToMap dereferences pointer fields the same way): otherwise a
+// *[]string value would be written as one single-cardinality property holding
+// the whole list instead of the per-element list properties the save path
+// writes. The runtime value is unwrapped, so a plain value for a pointer
+// field (and a pointer value for a plain field) both work. A nil pointer
+// carries no value: a nil pointer to a slice drops the existing property,
+// like updating a plain nil slice does, and a nil pointer to a scalar writes
+// a single null value.
 // Edge properties are single-valued in Gremlin, so edge queries write every
 // property (slices included) without a cardinality argument; slice values
 // become a single list-valued property, which is backend-dependent.
@@ -607,6 +616,21 @@ func (q *Query[T]) applyPropertyUpdate(
 ) *gremlingo.GraphTraversal {
 	if q.isEdgeQuery {
 		return query.Property(propertyName, value)
+	}
+	if deref := concreteValue(reflect.ValueOf(value)); deref.IsValid() {
+		fieldType = deref.Type()
+		value = deref.Interface()
+	} else {
+		// Nil or untyped nil: the declared field type decides between dropping
+		// a slice property and writing a single null value.
+		elemType := fieldType
+		if elemType.Kind() == reflect.Pointer {
+			elemType = elemType.Elem()
+		}
+		if elemType.Kind() == reflect.Slice {
+			return query.SideEffect(anonymousTraversal.Properties(propertyName).Drop())
+		}
+		return query.Property(gremlingo.Cardinality.Single, propertyName, nil)
 	}
 	switch fieldType.Kind() { //nolint: exhaustive // We are only handling slices and maps otherwise regular cardinality
 	case reflect.Slice:

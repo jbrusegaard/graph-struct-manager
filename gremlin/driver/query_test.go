@@ -33,6 +33,15 @@ func cleanDB() {
 	<-db.G().V().Drop().Iterate()
 }
 
+// testVertexWithPointerFieldsForUpdate models pointer-declared fields for
+// Update cardinality tests.
+type testVertexWithPointerFieldsForUpdate struct {
+	gsmtypes.Vertex
+	Name   string    `json:"name"   gremlin:"name"`
+	Tags   *[]string `json:"tags"   gremlin:"tags"`
+	Status *string   `json:"status" gremlin:"status"`
+}
+
 func TestQuery(t *testing.T) {
 	db, err := driver.Open(
 		DbURL, driver.Config{
@@ -285,6 +294,163 @@ func TestQuery(t *testing.T) {
 			}
 			if len(model.ListTest) != 2 {
 				t.Errorf("Expected stale slice elements to be dropped, got %v", model.ListTest)
+			}
+		},
+	)
+	t.Run(
+		"TestQueryUpdatePointerToSliceUsesListCardinality", func(t *testing.T) {
+			t.Cleanup(cleanDB)
+			v := testVertexWithPointerFieldsForUpdate{
+				Name: "pointer-slice",
+				Tags: &[]string{"old1", "old2"},
+			}
+			err = driver.Create(db, &v)
+			if err != nil {
+				t.Error(err)
+			}
+			// Stale elements must be dropped and new elements written
+			// per-element, exactly like updating a plain slice field.
+			err = driver.Model[testVertexWithPointerFieldsForUpdate](db).IDs(v.ID).
+				Update("tags", &[]string{"go", "graph"})
+			if err != nil {
+				t.Error(err)
+			}
+			model, err := driver.Model[testVertexWithPointerFieldsForUpdate](db).ID(v.ID)
+			if err != nil {
+				t.Error(err)
+			}
+			if model.Tags == nil || len(*model.Tags) != 2 ||
+				!slices.Contains(*model.Tags, "go") || !slices.Contains(*model.Tags, "graph") {
+				t.Errorf("Expected [*go *graph] elements, got %v", model.Tags)
+			}
+			// Prove the properties are stored per-element: one property per
+			// list element, not one single-cardinality property holding the
+			// whole list.
+			props, err := db.G().V(v.ID).Properties("tags").ToList()
+			if err != nil {
+				t.Error(err)
+			}
+			if len(props) != 2 {
+				t.Errorf("Expected 2 list-cardinality properties, got %d", len(props))
+			}
+		},
+	)
+	t.Run(
+		"TestQueryUpdateNilPointerToSliceClearsProperty", func(t *testing.T) {
+			t.Cleanup(cleanDB)
+			v := testVertexWithPointerFieldsForUpdate{
+				Name: "pointer-slice-nil",
+				Tags: &[]string{"stale"},
+			}
+			err = driver.Create(db, &v)
+			if err != nil {
+				t.Error(err)
+			}
+			err = driver.Model[testVertexWithPointerFieldsForUpdate](db).IDs(v.ID).
+				Update("tags", (*[]string)(nil))
+			if err != nil {
+				t.Error(err)
+			}
+			model, err := driver.Model[testVertexWithPointerFieldsForUpdate](db).ID(v.ID)
+			if err != nil {
+				t.Error(err)
+			}
+			if model.Tags != nil {
+				t.Errorf("Expected Tags cleared by nil pointer update, got %v", *model.Tags)
+			}
+			props, err := db.G().V(v.ID).Properties("tags").ToList()
+			if err != nil {
+				t.Error(err)
+			}
+			if len(props) != 0 {
+				t.Errorf("Expected tags properties dropped, got %d", len(props))
+			}
+		},
+	)
+	t.Run(
+		"TestQueryUpdatePointerToScalarWritesValue", func(t *testing.T) {
+			t.Cleanup(cleanDB)
+			v := testVertexWithPointerFieldsForUpdate{Name: "pointer-scalar"}
+			err = driver.Create(db, &v)
+			if err != nil {
+				t.Error(err)
+			}
+			status := "active"
+			err = driver.Model[testVertexWithPointerFieldsForUpdate](db).IDs(v.ID).
+				Update("status", &status)
+			if err != nil {
+				t.Error(err)
+			}
+			model, err := driver.Model[testVertexWithPointerFieldsForUpdate](db).ID(v.ID)
+			if err != nil {
+				t.Error(err)
+			}
+			if model.Status == nil || *model.Status != "active" {
+				t.Errorf("Expected Status *active, got %v", model.Status)
+			}
+		},
+	)
+	t.Run(
+		"TestQueryUpdatePointerFieldWithPlainValue", func(t *testing.T) {
+			t.Cleanup(cleanDB)
+			v := testVertexWithPointerFieldsForUpdate{
+				Name: "pointer-plain",
+				Tags: &[]string{"old"},
+			}
+			err = driver.Create(db, &v)
+			if err != nil {
+				t.Error(err)
+			}
+			// A plain value for a pointer-declared field must not panic and
+			// must write like the equivalent plain field type.
+			err = driver.Model[testVertexWithPointerFieldsForUpdate](db).IDs(v.ID).
+				Updates(map[string]any{
+					"tags":   []string{"go", "graph"},
+					"status": "plain",
+				})
+			if err != nil {
+				t.Error(err)
+			}
+			model, err := driver.Model[testVertexWithPointerFieldsForUpdate](db).ID(v.ID)
+			if err != nil {
+				t.Error(err)
+			}
+			if model.Status == nil || *model.Status != "plain" {
+				t.Errorf("Expected Status *plain, got %v", model.Status)
+			}
+			if model.Tags == nil || len(*model.Tags) != 2 ||
+				!slices.Contains(*model.Tags, "go") || !slices.Contains(*model.Tags, "graph") {
+				t.Errorf("Expected [*go *graph] elements, got %v", model.Tags)
+			}
+			props, err := db.G().V(v.ID).Properties("tags").ToList()
+			if err != nil {
+				t.Error(err)
+			}
+			if len(props) != 2 {
+				t.Errorf("Expected 2 list-cardinality properties, got %d", len(props))
+			}
+		},
+	)
+	t.Run(
+		"TestQueryUpdateNilPointerToScalarWritesNull", func(t *testing.T) {
+			t.Cleanup(cleanDB)
+			status := "active"
+			v := testVertexWithPointerFieldsForUpdate{Name: "pointer-scalar-nil", Status: &status}
+			err = driver.Create(db, &v)
+			if err != nil {
+				t.Error(err)
+			}
+			err = driver.Model[testVertexWithPointerFieldsForUpdate](db).IDs(v.ID).
+				Update("status", (*string)(nil))
+			if err != nil {
+				t.Error(err)
+			}
+			model, err := driver.Model[testVertexWithPointerFieldsForUpdate](db).ID(v.ID)
+			if err != nil {
+				t.Error(err)
+			}
+			if model.Status != nil {
+				t.Errorf("Expected Status nil after nil pointer update, got %v", *model.Status)
 			}
 		},
 	)
