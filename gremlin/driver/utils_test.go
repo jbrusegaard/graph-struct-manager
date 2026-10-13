@@ -133,6 +133,13 @@ type testVertexWithArrayField struct {
 	Fixed [4]byte `json:"fixed" gremlin:"fixed"`
 }
 
+// testVertexWithPointerSlices models list properties with nullable elements.
+type testVertexWithPointerSlices struct {
+	gsmtypes.Vertex
+	Names []*string `json:"names" gremlin:"names"`
+	Age   []*int64  `json:"age" gremlin:"age"`
+}
+
 // Label implements a custom label function
 func (v *testVertexWithCustomLabel) Label() string {
 	return "customVertexLabel"
@@ -707,6 +714,54 @@ func TestPointerFields(t *testing.T) {
 			want := []string{"a", "", "c"}
 			if !slices.Equal(v.Names, want) {
 				t.Errorf("Names should be %v, got %v", want, v.Names)
+			}
+		},
+	)
+	t.Run(
+		"UnloadPointerSliceElements", func(t *testing.T) {
+			t.Parallel()
+			var v testVertexWithPointerSlices
+			err := driver.UnloadGremlinResultIntoStruct(
+				&v, &gremlingo.Result{
+					Data: map[any]any{
+						"names": []any{"a", true, "c"},
+						"age":   []any{int64(7), nil},
+					},
+				},
+			)
+			if err != nil {
+				t.Fatalf("Error unloading gremlin result into struct: %v", err)
+			}
+			wantNames := []string{"a", "", "c"}
+			if len(v.Names) != 3 {
+				t.Fatalf("Names should have 3 elements, got %d", len(v.Names))
+			}
+			if v.Names[0] == nil || v.Names[1] != nil || v.Names[2] == nil ||
+				*v.Names[0] != wantNames[0] || *v.Names[2] != wantNames[2] {
+				t.Errorf(
+					"Names should be [%p nil %p] with values %v, got %v",
+					v.Names[0], v.Names[2], wantNames, v.Names,
+				)
+			}
+			if len(v.Age) != 2 || v.Age[0] == nil || *v.Age[0] != 7 || v.Age[1] != nil {
+				t.Errorf("Age should be [*7 nil], got %v", v.Age)
+			}
+		},
+	)
+	t.Run(
+		"UnloadSingleValueIntoPointerSlice", func(t *testing.T) {
+			t.Parallel()
+			var v testVertexWithPointerSlices
+			err := driver.UnloadGremlinResultIntoStruct(
+				&v, &gremlingo.Result{
+					Data: map[any]any{"names": "solo"},
+				},
+			)
+			if err != nil {
+				t.Fatalf("Error unloading gremlin result into struct: %v", err)
+			}
+			if len(v.Names) != 1 || v.Names[0] == nil || *v.Names[0] != "solo" {
+				t.Errorf("Names should be [*solo], got %v", v.Names)
 			}
 		},
 	)

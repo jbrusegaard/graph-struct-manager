@@ -277,12 +277,18 @@ func setFieldFromValue(field reflect.Value, value any) {
 		return
 	}
 	if isPointer {
-		pointer := reflect.New(targetType)
-		pointer.Elem().Set(converted)
-		field.Set(pointer)
+		field.Set(allocatePointer(targetType, converted))
 		return
 	}
 	field.Set(converted)
+}
+
+// allocatePointer wraps converted in a new pointer to elemType, which must be
+// converted's type.
+func allocatePointer(elemType reflect.Type, converted reflect.Value) reflect.Value {
+	pointer := reflect.New(elemType)
+	pointer.Elem().Set(converted)
+	return pointer
 }
 
 // concreteValue unwraps interfaces and non-nil pointers down to the value
@@ -303,9 +309,10 @@ func concreteValue(v reflect.Value) reflect.Value {
 }
 
 // convertFieldValue converts src into a value of t. Slices are converted
-// element-wise, keeping the zero value for elements that cannot convert, and
-// a single value is wrapped in a one-element slice when the target is a slice.
-// The bool reports whether src fits in t at all.
+// element-wise, keeping the zero value for elements that cannot convert and
+// allocating a pointer for elements that convert to a pointer element's base
+// type, and a single value is wrapped in a one-element slice when the target
+// is a slice. The bool reports whether src fits in t at all.
 func convertFieldValue(t reflect.Type, src reflect.Value) (reflect.Value, bool) {
 	srcType := src.Type()
 	srcIsSlice := srcType.Kind() == reflect.Slice
@@ -320,19 +327,36 @@ func convertFieldValue(t reflect.Type, src reflect.Value) (reflect.Value, bool) 
 		return src.Convert(t), true
 	case srcIsSlice && targetIsSlice:
 		slice := reflect.MakeSlice(t, src.Len(), src.Len())
+		elemType := t.Elem()
+		elemIsPointer := elemType.Kind() == reflect.Pointer
+		if elemIsPointer {
+			elemType = elemType.Elem()
+		}
 		for i := range src.Len() {
 			elem := concreteValue(src.Index(i))
-			if !elem.IsValid() || !elem.Type().ConvertibleTo(t.Elem()) {
+			if !elem.IsValid() || !elem.Type().ConvertibleTo(elemType) {
 				continue
 			}
-			slice.Index(i).Set(elem.Convert(t.Elem()))
+			if elemIsPointer {
+				slice.Index(i).Set(allocatePointer(elemType, elem.Convert(elemType)))
+				continue
+			}
+			slice.Index(i).Set(elem.Convert(elemType))
 		}
 		return slice, true
-	case targetIsSlice && srcType.ConvertibleTo(t.Elem()):
+	case targetIsSlice:
 		// Handle case where field is a slice but gremlin result is a single value
-		slice := reflect.MakeSlice(t, 1, 1)
-		slice.Index(0).Set(src.Convert(t.Elem()))
-		return slice, true
+		elemType := t.Elem()
+		if elemType.Kind() == reflect.Pointer && srcType.ConvertibleTo(elemType.Elem()) {
+			slice := reflect.MakeSlice(t, 1, 1)
+			slice.Index(0).Set(allocatePointer(elemType.Elem(), src.Convert(elemType.Elem())))
+			return slice, true
+		}
+		if srcType.ConvertibleTo(elemType) {
+			slice := reflect.MakeSlice(t, 1, 1)
+			slice.Index(0).Set(src.Convert(elemType))
+			return slice, true
+		}
 	}
 	return reflect.Value{}, false
 }
