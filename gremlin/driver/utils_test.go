@@ -127,6 +127,12 @@ type testVertexWithScalarSlices struct {
 	Names []string `json:"names" gremlin:"names"`
 }
 
+// testVertexWithArrayField models a fixed-size array property.
+type testVertexWithArrayField struct {
+	gsmtypes.Vertex
+	Fixed [4]byte `json:"fixed" gremlin:"fixed"`
+}
+
 // Label implements a custom label function
 func (v *testVertexWithCustomLabel) Label() string {
 	return "customVertexLabel"
@@ -701,6 +707,53 @@ func TestPointerFields(t *testing.T) {
 			want := []string{"a", "", "c"}
 			if !slices.Equal(v.Names, want) {
 				t.Errorf("Names should be %v, got %v", want, v.Names)
+			}
+		},
+	)
+	t.Run(
+		"UnloadMismatchesAreSkipped", func(t *testing.T) {
+			t.Parallel()
+			var v testVertexWithPointerFields
+			err := driver.UnloadGremlinResultIntoStruct(
+				&v, &gremlingo.Result{
+					// A list going into a single-value field is skipped.
+					Data: map[any]any{"name": []any{"a", "b"}},
+				},
+			)
+			if err != nil {
+				t.Fatalf("Error unloading gremlin result into struct: %v", err)
+			}
+			if v.Name != nil {
+				t.Errorf("List into single-value field should leave Name unset, got %v", *v.Name)
+			}
+
+			var s testVertexWithScalarSlices
+			err = driver.UnloadGremlinResultIntoStruct(
+				&s, &gremlingo.Result{
+					// An element that cannot convert keeps its zero value.
+					Data: map[any]any{"names": []any{"a", true, "c"}},
+				},
+			)
+			if err != nil {
+				t.Fatalf("Error unloading gremlin result into struct: %v", err)
+			}
+			want := []string{"a", "", "c"}
+			if !slices.Equal(s.Names, want) {
+				t.Errorf("Names should be %v, got %v", want, s.Names)
+			}
+
+			var a testVertexWithArrayField
+			err = driver.UnloadGremlinResultIntoStruct(
+				&a, &gremlingo.Result{
+					// A short list into a fixed-size array is skipped, not a panic.
+					Data: map[any]any{"fixed": []byte{1, 2}},
+				},
+			)
+			if err != nil {
+				t.Fatalf("Error unloading gremlin result into struct: %v", err)
+			}
+			if a.Fixed != [4]byte{} {
+				t.Errorf("Mismatched array should be left zero, got %v", a.Fixed)
 			}
 		},
 	)

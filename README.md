@@ -109,8 +109,8 @@ type User struct {
 - Empty strings (`""`)
 - Zero numbers (`0`, `0.0`)
 - False booleans (`false`)
-- Nil pointers (a pointer to a zero value, e.g. `&false`, counts as set and is written)
-- Empty slices, arrays, and maps
+- Nil pointers (a non-nil pointer to a zero value, e.g. `&false`, counts as set and is written)
+- Nil slices and maps (empty non-nil slices and maps are written)
 - Any type with a zero value
 
 **When to use omitempty:**

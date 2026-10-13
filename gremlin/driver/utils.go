@@ -256,7 +256,8 @@ func selectGremlinKey(tagName, subTraversalTag string, stringMap map[string]any)
 
 func setFieldFromValue(field reflect.Value, value any) {
 	// Gremlin results are external data: nil, or a typed-nil pointer, carries
-	// no value to assign and would panic the reflect conversions below.
+	// no value to assign and is skipped instead of converted. Unconvertible
+	// values are likewise skipped rather than panicked on.
 	src := concreteValue(reflect.ValueOf(value))
 	if !src.IsValid() {
 		return
@@ -311,6 +312,10 @@ func convertFieldValue(t reflect.Type, src reflect.Value) (reflect.Value, bool) 
 	targetIsSlice := t.Kind() == reflect.Slice
 
 	switch {
+	case srcIsSlice && t.Kind() == reflect.Array && src.Len() != t.Len():
+		// Slice-to-array conversion panics on a length mismatch; leave the
+		// field untouched instead.
+		return reflect.Value{}, false
 	case srcType.ConvertibleTo(t):
 		return src.Convert(t), true
 	case srcIsSlice && targetIsSlice:
@@ -432,9 +437,10 @@ func structToMap(
 		fieldSchema := &schema.mapFields[i]
 		fieldValue := rv.FieldByIndex(fieldSchema.index)
 
-		// omitempty is evaluated on the field itself (encoding/json
-		// semantics): a pointer to a zero value was set deliberately and is
-		// written; only nil pointers and other zero values are skipped.
+		// omitempty is evaluated on the field itself: a pointer to a zero
+		// value was set deliberately and is written; only nil pointers and
+		// other zero values are skipped. Unlike encoding/json, struct fields
+		// (e.g. a zero time.Time) are also omitted.
 		if fieldSchema.omitEmpty && fieldValue.IsZero() {
 			continue
 		}
