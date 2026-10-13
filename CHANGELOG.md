@@ -15,12 +15,14 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   loaded as all nils. (#48)
 - Lists shorter than a fixed-size array field no longer panic on load; the field is left
   untouched instead. (#48)
-- `Query.Update` / `Query.Updates` handle pointer-declared fields the same way `Save` does:
-  the value behind the pointer is written, not the pointer itself. A `*[]string` field is now
-  dropped and rewritten per-element with list cardinality (set cardinality on Neptune)
-  instead of being written as one single-cardinality property holding the whole list.
-  Updating a pointer-to-slice with a nil pointer (`(*[]string)(nil)`) drops the existing
-  property, like updating a plain nil slice. (#49)
+- `Query.Update` / `Query.Updates` handle pointer values the same way `Save` does:
+  the value behind the pointer is written, not the pointer itself, so a plain value for a
+  pointer-declared field (and a pointer value for a plain field) both work. A `*[]string`
+  field is now dropped and rewritten per-element with list cardinality (set cardinality on
+  Neptune) instead of being written as one single-cardinality property holding the whole
+  list. Updating a pointer-to-slice with a nil pointer (`(*[]string)(nil)`) drops the
+  existing property, like updating a plain nil slice; a nil pointer to a scalar
+  (`(*string)(nil)`) writes a single null value. (#49)
 
 ### Changed
 

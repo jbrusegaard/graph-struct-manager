@@ -1500,9 +1500,10 @@ err := GSM.Model[TestVertex](db).
     Where("name", comparator.EQ, "second").
     Update("tags", []string{"go", "graph"})
 
-// Pointer fields behave like Save: the value behind the pointer is written.
-// A pointer to a slice is replaced per-element like a plain slice, and a nil
-// pointer to a slice drops the existing property
+// Pointer values are unwrapped like Save: the value behind the pointer is
+// written. A pointer to a slice is replaced per-element like a plain slice,
+// and a nil pointer to a slice drops the existing property
+tags := []string{"go", "graph"}
 err := GSM.Model[TestVertex](db).
     Where("name", comparator.EQ, "second").
     Update("tags", &tags)

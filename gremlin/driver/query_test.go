@@ -391,6 +391,70 @@ func TestQuery(t *testing.T) {
 		},
 	)
 	t.Run(
+		"TestQueryUpdatePointerFieldWithPlainValue", func(t *testing.T) {
+			t.Cleanup(cleanDB)
+			v := testVertexWithPointerFieldsForUpdate{
+				Name: "pointer-plain",
+				Tags: &[]string{"old"},
+			}
+			err = driver.Create(db, &v)
+			if err != nil {
+				t.Error(err)
+			}
+			// A plain value for a pointer-declared field must not panic and
+			// must write like the equivalent plain field type.
+			err = driver.Model[testVertexWithPointerFieldsForUpdate](db).IDs(v.ID).
+				Updates(map[string]any{
+					"tags":   []string{"go", "graph"},
+					"status": "plain",
+				})
+			if err != nil {
+				t.Error(err)
+			}
+			model, err := driver.Model[testVertexWithPointerFieldsForUpdate](db).ID(v.ID)
+			if err != nil {
+				t.Error(err)
+			}
+			if model.Status == nil || *model.Status != "plain" {
+				t.Errorf("Expected Status *plain, got %v", model.Status)
+			}
+			if model.Tags == nil || len(*model.Tags) != 2 ||
+				!slices.Contains(*model.Tags, "go") || !slices.Contains(*model.Tags, "graph") {
+				t.Errorf("Expected [*go *graph] elements, got %v", model.Tags)
+			}
+			props, err := db.G().V(v.ID).Properties("tags").ToList()
+			if err != nil {
+				t.Error(err)
+			}
+			if len(props) != 2 {
+				t.Errorf("Expected 2 list-cardinality properties, got %d", len(props))
+			}
+		},
+	)
+	t.Run(
+		"TestQueryUpdateNilPointerToScalarWritesNull", func(t *testing.T) {
+			t.Cleanup(cleanDB)
+			status := "active"
+			v := testVertexWithPointerFieldsForUpdate{Name: "pointer-scalar-nil", Status: &status}
+			err = driver.Create(db, &v)
+			if err != nil {
+				t.Error(err)
+			}
+			err = driver.Model[testVertexWithPointerFieldsForUpdate](db).IDs(v.ID).
+				Update("status", (*string)(nil))
+			if err != nil {
+				t.Error(err)
+			}
+			model, err := driver.Model[testVertexWithPointerFieldsForUpdate](db).ID(v.ID)
+			if err != nil {
+				t.Error(err)
+			}
+			if model.Status != nil {
+				t.Errorf("Expected Status nil after nil pointer update, got %v", *model.Status)
+			}
+		},
+	)
+	t.Run(
 		"TestQueryUpdateSingleCardinality", func(t *testing.T) {
 			t.Cleanup(cleanDB)
 			err = seedData(db, seededData)
