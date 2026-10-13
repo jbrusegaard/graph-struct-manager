@@ -255,35 +255,110 @@ func selectGremlinKey(tagName, subTraversalTag string, stringMap map[string]any)
 }
 
 func setFieldFromValue(field reflect.Value, value any) {
-	// Gremlin results are external data; a nil property value has nothing
-	// to assign and would panic the reflect conversions below.
-	if value == nil {
+	// Gremlin results are external data: nil, or a typed-nil pointer, carries
+	// no value to assign and is skipped instead of converted. Unconvertible
+	// values are likewise skipped rather than panicked on.
+	src := concreteValue(reflect.ValueOf(value))
+	if !src.IsValid() {
 		return
 	}
-	// Assign a Gremlin value into a field, handling slice conversions.
-	gType := reflect.TypeOf(value)
+
+	// Nullable properties are modelled as pointer fields: convert to the
+	// element type and allocate, otherwise the value is silently dropped.
+	fieldType := field.Type()
+	isPointer := fieldType.Kind() == reflect.Pointer
+	targetType := fieldType
+	if isPointer {
+		targetType = fieldType.Elem()
+	}
+
+	converted, ok := convertFieldValue(targetType, src)
+	if !ok {
+		return
+	}
+	if isPointer {
+		field.Set(allocatePointer(targetType, converted))
+		return
+	}
+	field.Set(converted)
+}
+
+// allocatePointer wraps converted in a new pointer to elemType, which must be
+// converted's type.
+func allocatePointer(elemType reflect.Type, converted reflect.Value) reflect.Value {
+	pointer := reflect.New(elemType)
+	pointer.Elem().Set(converted)
+	return pointer
+}
+
+// concreteValue unwraps interfaces and non-nil pointers down to the value
+// beneath them. Nil at any level yields an invalid value, which callers skip.
+func concreteValue(v reflect.Value) reflect.Value {
+	for v.IsValid() {
+		switch v.Kind() { //nolint:exhaustive // only wrappers are unwrapped
+		case reflect.Interface, reflect.Pointer:
+			if v.IsNil() {
+				return reflect.Value{}
+			}
+			v = v.Elem()
+		default:
+			return v
+		}
+	}
+	return v
+}
+
+// convertFieldValue converts src into a value of t. Slices are converted
+// element-wise, keeping the zero value for elements that cannot convert and
+// allocating a pointer for elements that convert to a pointer element's base
+// type, and a single value is wrapped in a one-element slice when the target
+// is a slice. The bool reports whether src fits in t at all.
+func convertFieldValue(t reflect.Type, src reflect.Value) (reflect.Value, bool) {
+	srcType := src.Type()
+	srcIsSlice := srcType.Kind() == reflect.Slice
+	targetIsSlice := t.Kind() == reflect.Slice
 
 	switch {
-	case gType.ConvertibleTo(field.Type()):
-		field.Set(reflect.ValueOf(value).Convert(field.Type()))
-	case gType.Kind() == reflect.Slice:
-		strSlice := value.([]any) //nolint:errcheck // we already validated via reflect type check
-		slice := reflect.MakeSlice(
-			field.Type(), len(strSlice), len(strSlice),
-		)
-		for i, v := range strSlice {
-			slice.Index(i).Set(reflect.ValueOf(v).Convert(field.Type().Elem()))
+	case srcIsSlice && t.Kind() == reflect.Array && src.Len() != t.Len():
+		// Slice-to-array conversion panics on a length mismatch; leave the
+		// field untouched instead.
+		return reflect.Value{}, false
+	case srcType.ConvertibleTo(t):
+		return src.Convert(t), true
+	case srcIsSlice && targetIsSlice:
+		slice := reflect.MakeSlice(t, src.Len(), src.Len())
+		elemType := t.Elem()
+		elemIsPointer := elemType.Kind() == reflect.Pointer
+		if elemIsPointer {
+			elemType = elemType.Elem()
 		}
-		field.Set(slice)
-	case field.Type().Kind() == reflect.Slice && gType.ConvertibleTo(field.Type().Elem()):
+		for i := range src.Len() {
+			elem := concreteValue(src.Index(i))
+			if !elem.IsValid() || !elem.Type().ConvertibleTo(elemType) {
+				continue
+			}
+			if elemIsPointer {
+				slice.Index(i).Set(allocatePointer(elemType, elem.Convert(elemType)))
+				continue
+			}
+			slice.Index(i).Set(elem.Convert(elemType))
+		}
+		return slice, true
+	case targetIsSlice:
 		// Handle case where field is a slice but gremlin result is a single value
-		// Create a slice with one element
-		slice := reflect.MakeSlice(field.Type(), 1, 1)
-		slice.Index(0).Set(
-			reflect.ValueOf(value).Convert(field.Type().Elem()),
-		)
-		field.Set(slice)
+		elemType := t.Elem()
+		if elemType.Kind() == reflect.Pointer && srcType.ConvertibleTo(elemType.Elem()) {
+			slice := reflect.MakeSlice(t, 1, 1)
+			slice.Index(0).Set(allocatePointer(elemType.Elem(), src.Convert(elemType.Elem())))
+			return slice, true
+		}
+		if srcType.ConvertibleTo(elemType) {
+			slice := reflect.MakeSlice(t, 1, 1)
+			slice.Index(0).Set(src.Convert(elemType))
+			return slice, true
+		}
 	}
+	return reflect.Value{}, false
 }
 
 // setEdgeFieldFromValue assigns preloaded related vertices into a gremlinEdge
@@ -386,19 +461,22 @@ func structToMap(
 		fieldSchema := &schema.mapFields[i]
 		fieldValue := rv.FieldByIndex(fieldSchema.index)
 
-		// Check if field is a pointer and is nil (unset)
-		if fieldValue.Kind() == reflect.Pointer {
-			if fieldValue.IsNil() {
-				// Skip unset pointer fields
-				continue
-			}
-			// Dereference the pointer to get the actual value
-			fieldValue = fieldValue.Elem()
-		}
-
-		// If omitempty is set, skip zero values
+		// omitempty is evaluated on the field itself: a pointer to a zero
+		// value was set deliberately and is written; only nil pointers and
+		// other zero values are skipped. Unlike encoding/json, struct fields
+		// (e.g. a zero time.Time) are also omitted.
 		if fieldSchema.omitEmpty && fieldValue.IsZero() {
 			continue
+		}
+
+		// Check if field is a pointer: unset (nil) pointer fields are skipped,
+		// otherwise dereference to get the actual value.
+		if fieldValue.Kind() == reflect.Pointer {
+			dereferenced := concreteValue(fieldValue)
+			if !dereferenced.IsValid() {
+				continue
+			}
+			fieldValue = dereferenced
 		}
 
 		if fieldSchema.isSerializer {

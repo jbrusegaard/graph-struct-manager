@@ -110,6 +110,36 @@ type testVertexWithSubTraversalPreference struct {
 	Value string `json:"value" gremlin:"value" gremlinSubTraversal:"value_sub"`
 }
 
+// testVertexWithPointerFields models nullable properties as pointer fields.
+type testVertexWithPointerFields struct {
+	gsmtypes.Vertex
+	Name     *string   `json:"name"     gremlin:"name"`
+	Count    *int      `json:"count"    gremlin:"count"`
+	Active   *bool     `json:"active"   gremlin:"active"`
+	Tags     *[]string `json:"tags"     gremlin:"tags"`
+	Skipped  *string   `json:"skipped"  gremlin:"skipped"`
+	Nullable *string   `json:"nullable" gremlin:"nullable"`
+	Nickname *string   `json:"nickname" gremlin:"nickname,omitempty"`
+}
+
+type testVertexWithScalarSlices struct {
+	gsmtypes.Vertex
+	Names []string `json:"names" gremlin:"names"`
+}
+
+// testVertexWithArrayField models a fixed-size array property.
+type testVertexWithArrayField struct {
+	gsmtypes.Vertex
+	Fixed [4]byte `json:"fixed" gremlin:"fixed"`
+}
+
+// testVertexWithPointerSlices models list properties with nullable elements.
+type testVertexWithPointerSlices struct {
+	gsmtypes.Vertex
+	Names []*string `json:"names" gremlin:"names"`
+	Age   []*int64  `json:"age" gremlin:"age"`
+}
+
 // Label implements a custom label function
 func (v *testVertexWithCustomLabel) Label() string {
 	return "customVertexLabel"
@@ -578,6 +608,207 @@ func TestUtils(t *testing.T) {
 			err := driver.UnloadGremlinResultIntoStruct(v, nil)
 			if err == nil {
 				t.Errorf("Error should not be nil")
+			}
+		},
+	)
+}
+
+func TestPointerFields(t *testing.T) {
+	t.Parallel()
+	t.Run(
+		"UnloadAllocatesPointerFields", func(t *testing.T) {
+			t.Parallel()
+			var v testVertexWithPointerFields
+			err := driver.UnloadGremlinResultIntoStruct(
+				&v, &gremlingo.Result{
+					Data: map[any]any{
+						"name":     "test",
+						"count":    int64(3),
+						"active":   false,
+						"tags":     []any{"a", nil},
+						"skipped":  nil,
+						"nullable": (*string)(nil),
+					},
+				},
+			)
+			if err != nil {
+				t.Fatalf("Error unloading gremlin result into struct: %v", err)
+			}
+			if v.Name == nil || *v.Name != "test" {
+				t.Errorf("Name should be test, got %v", v.Name)
+			}
+			if v.Count == nil || *v.Count != 3 {
+				t.Errorf("Count should be 3, got %v", v.Count)
+			}
+			if v.Active == nil || *v.Active != false {
+				t.Errorf("Active should point to false, got %v", v.Active)
+			}
+			if v.Tags == nil || len(*v.Tags) != 2 || (*v.Tags)[0] != "a" ||
+				(*v.Tags)[1] != "" {
+				t.Errorf("Tags should be [a \"\"], got %v", v.Tags)
+			}
+			if v.Skipped != nil {
+				t.Errorf("Nil property should leave Skipped unset, got %v", *v.Skipped)
+			}
+			if v.Nullable != nil {
+				t.Errorf("Typed nil property should leave Nullable unset, got %v", *v.Nullable)
+			}
+		},
+	)
+	t.Run(
+		"StructToMapKeepsPointerToZeroValue", func(t *testing.T) {
+			t.Parallel()
+			name := "test"
+			active := false
+			nickname := ""
+			v := testVertexWithPointerFields{
+				Name: &name, Active: &active, Nickname: &nickname,
+			}
+			mapValue, err := driver.StructToMapForTest(&v)
+			if err != nil {
+				t.Fatalf("Error converting struct to map: %v", err)
+			}
+			if value, ok := mapValue["active"]; !ok || value != false {
+				t.Errorf("&false should be written as false, got %v (present: %v)", value, ok)
+			}
+			if value, ok := mapValue["nickname"]; !ok || value != "" {
+				t.Errorf("&\"\" with omitempty should be written, got %v (present: %v)", value, ok)
+			}
+			if value, ok := mapValue["name"]; !ok || value != "test" {
+				t.Errorf("Name should be test, got %v", value)
+			}
+			for _, property := range []string{"count", "skipped", "nullable"} {
+				if _, ok := mapValue[property]; ok {
+					t.Errorf("Nil pointer property %q should be skipped", property)
+				}
+			}
+		},
+	)
+	t.Run(
+		"StructToMapOmitsZeroValuePointersWithoutValue", func(t *testing.T) {
+			t.Parallel()
+			v := testVertexWithPointerFields{}
+			mapValue, err := driver.StructToMapForTest(&v)
+			if err != nil {
+				t.Fatalf("Error converting struct to map: %v", err)
+			}
+			for _, property := range []string{"name", "nickname"} {
+				if _, ok := mapValue[property]; ok {
+					t.Errorf("Nil pointer property %q should be skipped", property)
+				}
+			}
+		},
+	)
+	t.Run(
+		"UnloadSliceWithNilElement", func(t *testing.T) {
+			t.Parallel()
+			var v testVertexWithScalarSlices
+			err := driver.UnloadGremlinResultIntoStruct(
+				&v, &gremlingo.Result{
+					Data: map[any]any{"names": []any{"a", nil, "c"}},
+				},
+			)
+			if err != nil {
+				t.Fatalf("Error unloading gremlin result into struct: %v", err)
+			}
+			want := []string{"a", "", "c"}
+			if !slices.Equal(v.Names, want) {
+				t.Errorf("Names should be %v, got %v", want, v.Names)
+			}
+		},
+	)
+	t.Run(
+		"UnloadPointerSliceElements", func(t *testing.T) {
+			t.Parallel()
+			var v testVertexWithPointerSlices
+			err := driver.UnloadGremlinResultIntoStruct(
+				&v, &gremlingo.Result{
+					Data: map[any]any{
+						"names": []any{"a", true, "c"},
+						"age":   []any{int64(7), nil},
+					},
+				},
+			)
+			if err != nil {
+				t.Fatalf("Error unloading gremlin result into struct: %v", err)
+			}
+			wantNames := []string{"a", "", "c"}
+			if len(v.Names) != 3 {
+				t.Fatalf("Names should have 3 elements, got %d", len(v.Names))
+			}
+			if v.Names[0] == nil || v.Names[1] != nil || v.Names[2] == nil ||
+				*v.Names[0] != wantNames[0] || *v.Names[2] != wantNames[2] {
+				t.Errorf(
+					"Names should be [%p nil %p] with values %v, got %v",
+					v.Names[0], v.Names[2], wantNames, v.Names,
+				)
+			}
+			if len(v.Age) != 2 || v.Age[0] == nil || *v.Age[0] != 7 || v.Age[1] != nil {
+				t.Errorf("Age should be [*7 nil], got %v", v.Age)
+			}
+		},
+	)
+	t.Run(
+		"UnloadSingleValueIntoPointerSlice", func(t *testing.T) {
+			t.Parallel()
+			var v testVertexWithPointerSlices
+			err := driver.UnloadGremlinResultIntoStruct(
+				&v, &gremlingo.Result{
+					Data: map[any]any{"names": "solo"},
+				},
+			)
+			if err != nil {
+				t.Fatalf("Error unloading gremlin result into struct: %v", err)
+			}
+			if len(v.Names) != 1 || v.Names[0] == nil || *v.Names[0] != "solo" {
+				t.Errorf("Names should be [*solo], got %v", v.Names)
+			}
+		},
+	)
+	t.Run(
+		"UnloadMismatchesAreSkipped", func(t *testing.T) {
+			t.Parallel()
+			var v testVertexWithPointerFields
+			err := driver.UnloadGremlinResultIntoStruct(
+				&v, &gremlingo.Result{
+					// A list going into a single-value field is skipped.
+					Data: map[any]any{"name": []any{"a", "b"}},
+				},
+			)
+			if err != nil {
+				t.Fatalf("Error unloading gremlin result into struct: %v", err)
+			}
+			if v.Name != nil {
+				t.Errorf("List into single-value field should leave Name unset, got %v", *v.Name)
+			}
+
+			var s testVertexWithScalarSlices
+			err = driver.UnloadGremlinResultIntoStruct(
+				&s, &gremlingo.Result{
+					// An element that cannot convert keeps its zero value.
+					Data: map[any]any{"names": []any{"a", true, "c"}},
+				},
+			)
+			if err != nil {
+				t.Fatalf("Error unloading gremlin result into struct: %v", err)
+			}
+			want := []string{"a", "", "c"}
+			if !slices.Equal(s.Names, want) {
+				t.Errorf("Names should be %v, got %v", want, s.Names)
+			}
+
+			var a testVertexWithArrayField
+			err = driver.UnloadGremlinResultIntoStruct(
+				&a, &gremlingo.Result{
+					// A short list into a fixed-size array is skipped, not a panic.
+					Data: map[any]any{"fixed": []byte{1, 2}},
+				},
+			)
+			if err != nil {
+				t.Fatalf("Error unloading gremlin result into struct: %v", err)
+			}
+			if a.Fixed != [4]byte{} {
+				t.Errorf("Mismatched array should be left zero, got %v", a.Fixed)
 			}
 		},
 	)
