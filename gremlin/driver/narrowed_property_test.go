@@ -7,6 +7,10 @@ import (
 	"github.com/jbrusegaard/graph-struct-manager/gremlin/driver"
 )
 
+type narrowedPointerVertex struct {
+	Name *string `gremlin:"name"`
+}
+
 type narrowedVertex struct {
 	VendorProduct string   `gremlin:"vendorProduct"`
 	Priority      int      `gremlin:"priority"`
@@ -49,6 +53,29 @@ func TestNarrowMultiValuedPropertyIntoSingleValuedField(t *testing.T) {
 			}
 			if len(v.Tags) != 2 || v.Tags[0] != "alpha" || v.Tags[1] != "bravo" {
 				t.Errorf("Slice fields should keep every value, got %v", v.Tags)
+			}
+		},
+	)
+	t.Run(
+		"AllocatesPointerFieldFromFirstValue", func(t *testing.T) {
+			t.Parallel()
+			var v narrowedPointerVertex
+			narrowed, err := driver.UnloadGremlinResultIntoStructReportingNarrowed(
+				&v, &gremlingo.Result{
+					Data: map[any]any{"name": []any{"a", "b"}},
+				},
+			)
+			if err != nil {
+				t.Fatalf("Error unloading gremlin result into struct: %v", err)
+			}
+			if v.Name == nil {
+				t.Fatal("Name should be allocated from the first value, got nil")
+			}
+			if *v.Name != "a" {
+				t.Errorf("Name should be a, got %q", *v.Name)
+			}
+			if len(narrowed) != 1 || narrowed[0].Discarded != 1 {
+				t.Errorf("One discarded value should be reported, got %v", narrowed)
 			}
 		},
 	)
