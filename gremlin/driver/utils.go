@@ -34,6 +34,15 @@ func getStructName[T any]() (string, error) {
 	return t.Name(), nil
 }
 
+// NarrowedProperty records a gremlin property that arrived with several values
+// for a field that holds one. The first value was kept and Discarded counts
+// the rest.
+type NarrowedProperty struct {
+	Property  string
+	Field     string
+	Discarded int
+}
+
 // UnloadGremlinResultIntoStruct unloads a gremlin result into a struct
 // it will recursively unload the result into the struct
 // v any must be a pointer to a struct
@@ -50,34 +59,52 @@ func UnloadGremlinResultIntoStruct(
 	if !ok {
 		return errors.New("result is not a map")
 	}
+	_, err := unloadGremlinMapIntoStruct(v, mapResult)
+	return err
+}
+
+// UnloadGremlinResultIntoStructReportingNarrowed is UnloadGremlinResultIntoStruct
+// and additionally reports the properties whose extra values were discarded to
+// fit a single-valued field, so callers holding a logger can surface them.
+func UnloadGremlinResultIntoStructReportingNarrowed(
+	v any,
+	result *gremlingo.Result,
+) ([]NarrowedProperty, error) {
+	if result == nil {
+		return nil, errors.New("gremlin result is nil")
+	}
+	mapResult, ok := result.GetInterface().(map[any]any)
+	if !ok {
+		return nil, errors.New("result is not a map")
+	}
 	return unloadGremlinMapIntoStruct(v, mapResult)
 }
 
 // unloadGremlinMapIntoStruct unloads a gremlin result map into a struct.
 // v must be a non-nil pointer to a struct with gremlin tags on the fields.
-func unloadGremlinMapIntoStruct(v any, mapResult map[any]any) error {
+func unloadGremlinMapIntoStruct(v any, mapResult map[any]any) ([]NarrowedProperty, error) {
 	// make string map
 	stringMap := make(map[string]any, len(mapResult))
 	for key, value := range mapResult {
 		keyStr, keyOk := key.(string)
 		if !keyOk {
-			return errors.New("gremlin key is not a string")
+			return nil, errors.New("gremlin key is not a string")
 		}
 		stringMap[keyStr] = value
 	}
 	rv := reflect.ValueOf(v)
 
 	if rv.Kind() != reflect.Pointer {
-		return errors.New("v must be a pointer")
+		return nil, errors.New("v must be a pointer")
 	}
 
 	if rv.IsNil() {
-		return errors.New("v must be a non-nil pointer")
+		return nil, errors.New("v must be a non-nil pointer")
 	}
 
 	elem := rv.Elem()
 	if elem.Kind() != reflect.Struct {
-		return errors.New("v must point to a struct")
+		return nil, errors.New("v must point to a struct")
 	}
 
 	unmappedCollector, collectUnmapped := v.(gsmtypes.UnmappedPropertiesType)
@@ -86,8 +113,9 @@ func unloadGremlinMapIntoStruct(v any, mapResult map[any]any) error {
 		usedKeys = make(map[string]struct{}, len(stringMap))
 	}
 
-	if err := unloadSchemaFields(elem, stringMap, usedKeys); err != nil {
-		return err
+	narrowed, err := unloadSchemaFields(elem, stringMap, usedKeys)
+	if err != nil {
+		return nil, err
 	}
 
 	if collectUnmapped {
@@ -100,17 +128,20 @@ func unloadGremlinMapIntoStruct(v any, mapResult map[any]any) error {
 		}
 		unmappedCollector.SetUnmappedProperties(extras)
 	}
-	return nil
+	return narrowed, nil
 }
 
 // unloadSchemaFields sets struct fields from the gremlin result map using
 // the cached field plan. Keys consumed by mapped fields are recorded in
-// usedKeys when it is non-nil.
+// usedKeys when it is non-nil. The returned slice lists properties whose
+// extra values were discarded to fit a single-valued field.
 func unloadSchemaFields(
 	elem reflect.Value,
 	stringMap map[string]any,
 	usedKeys map[string]struct{},
-) error {
+) ([]NarrowedProperty, error) {
+	var narrowed []NarrowedProperty
+
 	schema := schemaFor(elem.Type())
 	for i := range schema.unloadFields {
 		fieldSchema := &schema.unloadFields[i]
@@ -145,16 +176,38 @@ func unloadSchemaFields(
 		}
 		if fieldSchema.isDeserializer {
 			if err := deserializeGremlinValue(field, stringMap[selectedKey]); err != nil {
-				return fmt.Errorf(
+				return nil, fmt.Errorf(
 					"deserialize property %q into field %s: %w",
 					selectedKey, fieldSchema.goName, err,
 				)
 			}
 			continue
 		}
-		setFieldFromValue(field, stringMap[selectedKey])
+		narrowed = recordNarrowed(
+			narrowed,
+			selectedKey,
+			fieldSchema.goName,
+			setFieldFromValue(field, stringMap[selectedKey]),
+		)
 	}
-	return nil
+	return narrowed, nil
+}
+
+// recordNarrowed appends a report when values were discarded to fit a
+// single-valued field, and leaves the slice alone otherwise.
+func recordNarrowed(
+	narrowed []NarrowedProperty,
+	property, field string,
+	discarded int,
+) []NarrowedProperty {
+	if discarded <= 0 {
+		return narrowed
+	}
+	return append(narrowed, NarrowedProperty{
+		Property:  property,
+		Field:     field,
+		Discarded: discarded,
+	})
 }
 
 // serializeGremlinValue converts a field value whose type implements
@@ -254,13 +307,17 @@ func selectGremlinKey(tagName, subTraversalTag string, stringMap map[string]any)
 	return "", false
 }
 
-func setFieldFromValue(field reflect.Value, value any) {
+// setFieldFromValue assigns a gremlin property value to a struct field. The
+// returned count is the number of values that were discarded to fit a
+// multi-valued property into a single-valued field, and is zero in every
+// other case.
+func setFieldFromValue(field reflect.Value, value any) int {
 	// Gremlin results are external data: nil, or a typed-nil pointer, carries
 	// no value to assign and is skipped instead of converted. Unconvertible
 	// values are likewise skipped rather than panicked on.
 	src := concreteValue(reflect.ValueOf(value))
 	if !src.IsValid() {
-		return
+		return 0
 	}
 
 	// Nullable properties are modelled as pointer fields: convert to the
@@ -272,15 +329,18 @@ func setFieldFromValue(field reflect.Value, value any) {
 		targetType = fieldType.Elem()
 	}
 
-	converted, ok := convertFieldValue(targetType, src)
+	converted, discarded, ok := convertFieldValue(targetType, src)
 	if !ok {
-		return
+		return 0
 	}
 	if isPointer {
 		field.Set(allocatePointer(targetType, converted))
-		return
+
+		return discarded
 	}
 	field.Set(converted)
+
+	return discarded
 }
 
 // allocatePointer wraps converted in a new pointer to elemType, which must be
@@ -312,8 +372,13 @@ func concreteValue(v reflect.Value) reflect.Value {
 // element-wise, keeping the zero value for elements that cannot convert and
 // allocating a pointer for elements that convert to a pointer element's base
 // type, and a single value is wrapped in a one-element slice when the target
-// is a slice. The bool reports whether src fits in t at all.
-func convertFieldValue(t reflect.Type, src reflect.Value) (reflect.Value, bool) {
+// is a slice. A multi-valued property arriving at a single-valued field keeps
+// the first value, matching how Gremlin itself narrows a property reference to
+// one value.
+//
+// It returns the converted value, the number of values discarded to fit a
+// single-valued field, and whether src fits in t at all.
+func convertFieldValue(t reflect.Type, src reflect.Value) (reflect.Value, int, bool) {
 	srcType := src.Type()
 	srcIsSlice := srcType.Kind() == reflect.Slice
 	targetIsSlice := t.Kind() == reflect.Slice
@@ -322,9 +387,9 @@ func convertFieldValue(t reflect.Type, src reflect.Value) (reflect.Value, bool) 
 	case srcIsSlice && t.Kind() == reflect.Array && src.Len() != t.Len():
 		// Slice-to-array conversion panics on a length mismatch; leave the
 		// field untouched instead.
-		return reflect.Value{}, false
+		return reflect.Value{}, 0, false
 	case srcType.ConvertibleTo(t):
-		return src.Convert(t), true
+		return src.Convert(t), 0, true
 	case srcIsSlice && targetIsSlice:
 		slice := reflect.MakeSlice(t, src.Len(), src.Len())
 		elemType := t.Elem()
@@ -343,22 +408,37 @@ func convertFieldValue(t reflect.Type, src reflect.Value) (reflect.Value, bool) 
 			}
 			slice.Index(i).Set(elem.Convert(elemType))
 		}
-		return slice, true
+		return slice, 0, true
 	case targetIsSlice:
 		// Handle case where field is a slice but gremlin result is a single value
 		elemType := t.Elem()
 		if elemType.Kind() == reflect.Pointer && srcType.ConvertibleTo(elemType.Elem()) {
 			slice := reflect.MakeSlice(t, 1, 1)
 			slice.Index(0).Set(allocatePointer(elemType.Elem(), src.Convert(elemType.Elem())))
-			return slice, true
+			return slice, 0, true
 		}
 		if srcType.ConvertibleTo(elemType) {
 			slice := reflect.MakeSlice(t, 1, 1)
 			slice.Index(0).Set(src.Convert(elemType))
-			return slice, true
+			return slice, 0, true
 		}
+	case srcIsSlice && src.Len() > 0:
+		return narrowToFirstValue(t, src)
 	}
-	return reflect.Value{}, false
+	return reflect.Value{}, 0, false
+}
+
+// narrowToFirstValue fits a multi-valued property into a single-valued field.
+// Every Neptune vertex property is set-cardinality, so a property that models a
+// single value still arrives as a list once it holds more than one; keeping the
+// first value loses less than dropping the property, which would load the field
+// as its zero value.
+func narrowToFirstValue(t reflect.Type, src reflect.Value) (reflect.Value, int, bool) {
+	first := concreteValue(src.Index(0))
+	if !first.IsValid() || !first.Type().ConvertibleTo(t) {
+		return reflect.Value{}, 0, false
+	}
+	return first.Convert(t), src.Len() - 1, true
 }
 
 // setEdgeFieldFromValue assigns preloaded related vertices into a gremlinEdge
@@ -408,7 +488,9 @@ func newStructFromGremlinMap(elemType reflect.Type, value any) (reflect.Value, b
 		return reflect.Value{}, false
 	}
 	structPointer := reflect.New(structType)
-	if err := unloadGremlinMapIntoStruct(structPointer.Interface(), mapValue); err != nil {
+	// Narrowing inside a preloaded vertex is not reported, for the same reason
+	// its errors are not: this path has no way to surface either to the caller.
+	if _, err := unloadGremlinMapIntoStruct(structPointer.Interface(), mapValue); err != nil {
 		return reflect.Value{}, false
 	}
 	if isPointer {
