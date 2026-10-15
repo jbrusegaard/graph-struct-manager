@@ -768,22 +768,8 @@ func TestPointerFields(t *testing.T) {
 	t.Run(
 		"UnloadMismatchesAreSkipped", func(t *testing.T) {
 			t.Parallel()
-			var v testVertexWithPointerFields
-			err := driver.UnloadGremlinResultIntoStruct(
-				&v, &gremlingo.Result{
-					// A list going into a single-value field is skipped.
-					Data: map[any]any{"name": []any{"a", "b"}},
-				},
-			)
-			if err != nil {
-				t.Fatalf("Error unloading gremlin result into struct: %v", err)
-			}
-			if v.Name != nil {
-				t.Errorf("List into single-value field should leave Name unset, got %v", *v.Name)
-			}
-
 			var s testVertexWithScalarSlices
-			err = driver.UnloadGremlinResultIntoStruct(
+			err := driver.UnloadGremlinResultIntoStruct(
 				&s, &gremlingo.Result{
 					// An element that cannot convert keeps its zero value.
 					Data: map[any]any{"names": []any{"a", true, "c"}},

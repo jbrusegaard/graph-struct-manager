@@ -5,6 +5,28 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- A property holding several values no longer loads a single-valued field as its zero
+  value. Every Neptune vertex property is set-cardinality, so a field that models one
+  value still receives a list once the property holds more than one; the first value is
+  now kept, matching how Gremlin itself narrows a property reference. Applies to every
+  scalar kind (`string`, numeric, `bool`). Slice fields, `[]byte`-to-`string` conversions
+  and fixed-size arrays are unaffected.
+
+### Added
+
+- `Find`, `Take` and `ID` log a warning naming the property, the struct field and how many
+  values were discarded whenever the narrowing above happens. Set-cardinality writes are
+  easy to make by accident and hard to discover from the loaded struct alone, so the loss
+  is surfaced rather than left to be noticed as an unexpectedly blank or stale field.
+- `UnloadGremlinResultIntoStructReportingNarrowed` returns the same information as
+  `[]NarrowedProperty` for callers that unload results themselves.
+  `UnloadGremlinResultIntoStruct` is unchanged. Narrowing inside a preloaded vertex is not
+  reported, for the same reason its errors are not: that path cannot surface either.
+
 ## [v0.6.1] - 2026-10-12
 
 ### Fixed

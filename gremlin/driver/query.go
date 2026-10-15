@@ -334,10 +334,11 @@ func (q *Query[T]) Find() ([]T, error) {
 	results := make([]T, 0, len(queryResults))
 	for _, result := range queryResults {
 		var v T
-		err = UnloadGremlinResultIntoStruct(&v, result)
-		if err != nil {
-			return nil, err
+		narrowed, unloadErr := UnloadGremlinResultIntoStructReportingNarrowed(&v, result)
+		if unloadErr != nil {
+			return nil, unloadErr
 		}
+		q.logNarrowedProperties(narrowed)
 		if findHookErr := runAfterFindHook(q.db, &v); findHookErr != nil {
 			return nil, findHookErr
 		}
@@ -368,10 +369,11 @@ func (q *Query[T]) Take() (T, error) {
 		return v, err
 	}
 
-	err = UnloadGremlinResultIntoStruct(&v, result)
-	if err != nil {
-		return v, err
+	narrowed, unloadErr := UnloadGremlinResultIntoStructReportingNarrowed(&v, result)
+	if unloadErr != nil {
+		return v, unloadErr
 	}
+	q.logNarrowedProperties(narrowed)
 
 	if findHookErr := runAfterFindHook(q.db, &v); findHookErr != nil {
 		return v, findHookErr
@@ -431,10 +433,11 @@ func (q *Query[T]) ID(id any) (T, error) {
 		}
 		return v, err
 	}
-	err = UnloadGremlinResultIntoStruct(&v, result)
-	if err != nil {
-		return v, err
+	narrowed, unloadErr := UnloadGremlinResultIntoStructReportingNarrowed(&v, result)
+	if unloadErr != nil {
+		return v, unloadErr
 	}
+	q.logNarrowedProperties(narrowed)
 	if findHookErr := runAfterFindHook(q.db, &v); findHookErr != nil {
 		return v, findHookErr
 	}
@@ -653,6 +656,24 @@ func (q *Query[T]) applyPropertyUpdate(
 		query = query.Property(gremlingo.Cardinality.Single, propertyName, value)
 	}
 	return query
+}
+
+// logNarrowedProperties warns about properties that held several values for a
+// single-valued field. Keeping the first value matches Gremlin's own narrowing,
+// but it is silent data loss, so it is surfaced rather than left to be found by
+// noticing a field is unexpectedly blank or stale.
+func (q *Query[T]) logNarrowedProperties(narrowed []NarrowedProperty) {
+	for _, property := range narrowed {
+		q.db.logger.Warnf(
+			"gremlin property %q holds %d values for single-valued field %s.%s; "+
+				"kept the first and discarded %d",
+			property.Property,
+			property.Discarded+1,
+			reflect.TypeFor[T]().Name(),
+			property.Field,
+			property.Discarded,
+		)
+	}
 }
 
 // BuildQuery constructs the Gremlin traversal from the query conditions
