@@ -813,3 +813,79 @@ func TestPointerFields(t *testing.T) {
 		},
 	)
 }
+
+func TestUnloadRejectsNumericToString(t *testing.T) {
+	t.Parallel()
+	t.Run(
+		"ScalarNumberIntoStringFieldSkipped", func(t *testing.T) {
+			t.Parallel()
+			var v testVertexForUtils
+			err := driver.UnloadGremlinResultIntoStruct(
+				&v, &gremlingo.Result{
+					// reflect would convert 123 to the rune "{"; the field
+					// must stay untouched instead.
+					Data: map[any]any{"name": int64(123)},
+				},
+			)
+			if err != nil {
+				t.Fatalf("Error unloading gremlin result into struct: %v", err)
+			}
+			if v.Name != "" {
+				t.Errorf("Number into string field should leave Name unset, got %q", v.Name)
+			}
+		},
+	)
+	t.Run(
+		"NumericElementKeepsZeroInStringSlice", func(t *testing.T) {
+			t.Parallel()
+			var v testVertexForUtils
+			err := driver.UnloadGremlinResultIntoStruct(
+				&v, &gremlingo.Result{
+					Data: map[any]any{"listTest": []any{"a", int64(9), "c"}},
+				},
+			)
+			if err != nil {
+				t.Fatalf("Error unloading gremlin result into struct: %v", err)
+			}
+			want := []string{"a", "", "c"}
+			if !slices.Equal(v.ListTest, want) {
+				t.Errorf("ListTest should be %v, got %v", want, v.ListTest)
+			}
+		},
+	)
+	t.Run(
+		"SingleStringStillWrapsIntoSlice", func(t *testing.T) {
+			t.Parallel()
+			var v testVertexForUtils
+			err := driver.UnloadGremlinResultIntoStruct(
+				&v, &gremlingo.Result{
+					Data: map[any]any{"listTest": "solo"},
+				},
+			)
+			if err != nil {
+				t.Fatalf("Error unloading gremlin result into struct: %v", err)
+			}
+			want := []string{"solo"}
+			if !slices.Equal(v.ListTest, want) {
+				t.Errorf("ListTest should be %v, got %v", want, v.ListTest)
+			}
+		},
+	)
+	t.Run(
+		"ByteSliceIntoStringStillConverts", func(t *testing.T) {
+			t.Parallel()
+			var v testVertexForUtils
+			err := driver.UnloadGremlinResultIntoStruct(
+				&v, &gremlingo.Result{
+					Data: map[any]any{"name": []byte("ok")},
+				},
+			)
+			if err != nil {
+				t.Fatalf("Error unloading gremlin result into struct: %v", err)
+			}
+			if v.Name != "ok" {
+				t.Errorf("Byte slice into string field should convert, got %q", v.Name)
+			}
+		},
+	)
+}

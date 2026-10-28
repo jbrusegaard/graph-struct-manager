@@ -308,6 +308,20 @@ func concreteValue(v reflect.Value) reflect.Value {
 	return v
 }
 
+// convertibleTo reports whether a value of from can convert to to without
+// silently garbling it. reflect treats integer-to-string as a rune
+// conversion, so numeric data unloaded into a string field would become a
+// single control character; those conversions are rejected here.
+func convertibleTo(from, to reflect.Type) bool {
+	// The Kind constants for signed and unsigned integers sit contiguously
+	// between Bool and Float32.
+	kind := from.Kind()
+	if to.Kind() == reflect.String && kind > reflect.Bool && kind < reflect.Float32 {
+		return false
+	}
+	return from.ConvertibleTo(to)
+}
+
 // convertFieldValue converts src into a value of t. Slices are converted
 // element-wise, keeping the zero value for elements that cannot convert and
 // allocating a pointer for elements that convert to a pointer element's base
@@ -323,7 +337,7 @@ func convertFieldValue(t reflect.Type, src reflect.Value) (reflect.Value, bool) 
 		// Slice-to-array conversion panics on a length mismatch; leave the
 		// field untouched instead.
 		return reflect.Value{}, false
-	case srcType.ConvertibleTo(t):
+	case convertibleTo(srcType, t):
 		return src.Convert(t), true
 	case srcIsSlice && targetIsSlice:
 		slice := reflect.MakeSlice(t, src.Len(), src.Len())
@@ -334,7 +348,7 @@ func convertFieldValue(t reflect.Type, src reflect.Value) (reflect.Value, bool) 
 		}
 		for i := range src.Len() {
 			elem := concreteValue(src.Index(i))
-			if !elem.IsValid() || !elem.Type().ConvertibleTo(elemType) {
+			if !elem.IsValid() || !convertibleTo(elem.Type(), elemType) {
 				continue
 			}
 			if elemIsPointer {
@@ -347,12 +361,12 @@ func convertFieldValue(t reflect.Type, src reflect.Value) (reflect.Value, bool) 
 	case targetIsSlice:
 		// Handle case where field is a slice but gremlin result is a single value
 		elemType := t.Elem()
-		if elemType.Kind() == reflect.Pointer && srcType.ConvertibleTo(elemType.Elem()) {
+		if elemType.Kind() == reflect.Pointer && convertibleTo(srcType, elemType.Elem()) {
 			slice := reflect.MakeSlice(t, 1, 1)
 			slice.Index(0).Set(allocatePointer(elemType.Elem(), src.Convert(elemType.Elem())))
 			return slice, true
 		}
-		if srcType.ConvertibleTo(elemType) {
+		if convertibleTo(srcType, elemType) {
 			slice := reflect.MakeSlice(t, 1, 1)
 			slice.Index(0).Set(src.Convert(elemType))
 			return slice, true

@@ -5,6 +5,15 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Numeric properties no longer land in string fields as single control characters. A number
+  read from the graph into a `string` field now leaves the field at its zero value instead of
+  producing a one-character garbage value (`123` became `"{"`). Byte slices still convert to
+  strings. This covers single values and slice elements, including pointer-declared fields.
+
 ## [v0.6.1] - 2026-10-12
 
 ### Fixed
