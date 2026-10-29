@@ -386,7 +386,7 @@ func concreteValue(v reflect.Value) reflect.Value {
 // convertible, but that conversion is a code-point mapping, not a parse:
 // "80" would load into []int32 as {56, 48}. Only that case is blocked;
 // everything else ConvertibleTo allows — numeric widening/narrowing,
-// []byte <-> string, boxing into any, string into [N]byte — stays through.
+// []byte <-> string, boxing into any — stays through.
 // Integer -> string is handled with decimal formatting by convertValue.
 func safeConvertible(from, t reflect.Type) bool {
 	if !from.ConvertibleTo(t) {

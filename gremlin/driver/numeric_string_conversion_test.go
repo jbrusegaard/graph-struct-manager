@@ -160,8 +160,8 @@ func TestIntegerStringConversions(t *testing.T) {
 			},
 		},
 		{
-			name: "StringLoadsIntoByteArrayField",
-			data: map[any]any{"fixed": "hell"},
+			name: "ByteSliceLoadsIntoByteArrayField",
+			data: map[any]any{"fixed": []byte("hell")},
 			check: func(t *testing.T, v *conversionVertex) {
 				if want := [4]byte{'h', 'e', 'l', 'l'}; v.Fixed != want {
 					t.Errorf("Fixed = %#v, want %#v", v.Fixed, want)
