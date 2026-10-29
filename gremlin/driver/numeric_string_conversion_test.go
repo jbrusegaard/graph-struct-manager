@@ -8,12 +8,13 @@ import (
 )
 
 type conversionVertex struct {
-	Rank     string   `gremlin:"rank"`
-	Tag      string   `gremlin:"tag"`
-	Weights  []string `gremlin:"weights"`
-	Score    *string  `gremlin:"score"`
-	Quantity int      `gremlin:"quantity"`
-	Ratio    float64  `gremlin:"ratio"`
+	Rank       string    `gremlin:"rank"`
+	Tag        string    `gremlin:"tag"`
+	Weights    []string  `gremlin:"weights"`
+	PtrWeights []*string `gremlin:"ptrWeights"`
+	Score      *string   `gremlin:"score"`
+	Quantity   int       `gremlin:"quantity"`
+	Ratio      float64   `gremlin:"ratio"`
 }
 
 // Gremlin backends return integers as int32/int64. Go's reflect package treats
@@ -118,10 +119,41 @@ func TestIntegerPropertyDoesNotConvertToStringField(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Error unloading gremlin result into struct: %v", err)
 			}
-			for _, w := range v.Weights {
-				if w == "*" || w == "\a" {
-					t.Errorf("Weights should skip integer elements, got %v", v.Weights)
-				}
+			if len(v.Weights) != 2 || v.Weights[0] != "" || v.Weights[1] != "eight" {
+				t.Errorf(`Weights should be ["", "eight"], got %q`, v.Weights)
+			}
+		},
+	)
+	t.Run(
+		"IntegerElementsZeroFillPointerStringSlice", func(t *testing.T) {
+			t.Parallel()
+			var v conversionVertex
+			err := driver.UnloadGremlinResultIntoStruct(
+				&v, &gremlingo.Result{Data: map[any]any{"ptrWeights": []any{int64(7), "eight"}}},
+			)
+			if err != nil {
+				t.Fatalf("Error unloading gremlin result into struct: %v", err)
+			}
+			if len(v.PtrWeights) != 2 || v.PtrWeights[0] != nil {
+				t.Fatalf(`PtrWeights should be [nil, ptr("eight")], got %v`, v.PtrWeights)
+			}
+			if v.PtrWeights[1] == nil || *v.PtrWeights[1] != "eight" {
+				t.Errorf(`PtrWeights[1] should be "eight", got %v`, v.PtrWeights[1])
+			}
+		},
+	)
+	t.Run(
+		"IntegerDoesNotWrapIntoPointerStringSlice", func(t *testing.T) {
+			t.Parallel()
+			var v conversionVertex
+			err := driver.UnloadGremlinResultIntoStruct(
+				&v, &gremlingo.Result{Data: map[any]any{"ptrWeights": int64(7)}},
+			)
+			if err != nil {
+				t.Fatalf("Error unloading gremlin result into struct: %v", err)
+			}
+			if v.PtrWeights != nil {
+				t.Errorf("PtrWeights should be left nil, got %v", v.PtrWeights)
 			}
 		},
 	)
