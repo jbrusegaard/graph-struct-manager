@@ -131,6 +131,25 @@ func unloadGremlinMapIntoStruct(v any, mapResult map[any]any) ([]NarrowedPropert
 	return narrowed, nil
 }
 
+// unloadEdgeField loads a gremlinEdge field from the preloaded value keyed by
+// the Go field name, recording the key as used when a used-keys set is being
+// tracked. Missing keys leave the field untouched.
+func unloadEdgeField(
+	fieldSchema *fieldSchema,
+	field reflect.Value,
+	stringMap map[string]any,
+	usedKeys map[string]struct{},
+) {
+	value, ok := stringMap[fieldSchema.goName]
+	if !ok {
+		return
+	}
+	if usedKeys != nil {
+		usedKeys[fieldSchema.goName] = struct{}{}
+	}
+	setEdgeFieldFromValue(field, value)
+}
+
 // unloadSchemaFields sets struct fields from the gremlin result map using
 // the cached field plan. Keys consumed by mapped fields are recorded in
 // usedKeys when it is non-nil. The returned slice lists properties whose
@@ -152,14 +171,7 @@ func unloadSchemaFields(
 
 		// gremlinEdge fields are loaded via Preload and keyed by the Go field name.
 		if fieldSchema.isEdge {
-			value, ok := stringMap[fieldSchema.goName]
-			if !ok {
-				continue
-			}
-			if usedKeys != nil {
-				usedKeys[fieldSchema.goName] = struct{}{}
-			}
-			setEdgeFieldFromValue(field, value)
+			unloadEdgeField(fieldSchema, field, stringMap, usedKeys)
 			continue
 		}
 
