@@ -382,28 +382,23 @@ func concreteValue(v reflect.Value) reflect.Value {
 }
 
 // safeConvertible reports whether a value of type from may be silently
-// converted to type t. A string may only pair with string or []byte: reflect
-// also classifies string -> []rune (== []int32) as convertible, mapping each
-// character to its code point, so "80" would load into []int32 as {56, 48}.
-// Integer -> string is formatted as decimal text by convertValue before this
-// check; everything it rejects would otherwise arrive as rune mojibake.
-// Legitimate conversions — numeric widening/narrowing, []byte <-> string —
-// stay allowed.
+// converted to type t. Go classifies string <-> []rune (which is []int32) as
+// convertible, but that conversion is a code-point mapping, not a parse:
+// "80" would load into []int32 as {56, 48}. Only that case is blocked;
+// everything else ConvertibleTo allows — numeric widening/narrowing,
+// []byte <-> string, boxing into any, string into [N]byte — stays through.
+// Integer -> string is handled with decimal formatting by convertValue.
 func safeConvertible(from, t reflect.Type) bool {
 	if !from.ConvertibleTo(t) {
 		return false
 	}
-	if t.Kind() == reflect.Interface {
-		// Boxing a value into an interface holds it unchanged.
-		return true
-	}
-	if from.Kind() == reflect.String || t.Kind() == reflect.String {
-		other := from
-		if from.Kind() == reflect.String {
-			other = t
+	if from.Kind() == reflect.String && t.Kind() == reflect.Slice ||
+		from.Kind() == reflect.Slice && t.Kind() == reflect.String {
+		other := t
+		if from.Kind() == reflect.Slice {
+			other = from
 		}
-		return other.Kind() == reflect.String ||
-			(other.Kind() == reflect.Slice && other.Elem().Kind() == reflect.Uint8)
+		return other.Elem().Kind() == reflect.Uint8
 	}
 	return true
 }
@@ -466,6 +461,20 @@ func convertFieldValue(t reflect.Type, src reflect.Value) (reflect.Value, int, b
 	return reflect.Value{}, 0, false
 }
 
+// convertElement converts v to elemType, allocating a pointer when the
+// element type is one. Shared by the slice-element loop and the
+// single-value wrap so the pointer branch lives in exactly one place.
+func convertElement(elemType reflect.Type, v reflect.Value) (reflect.Value, bool) {
+	if elemType.Kind() != reflect.Pointer {
+		return convertValue(v, elemType)
+	}
+	converted, ok := convertValue(v, elemType.Elem())
+	if !ok {
+		return reflect.Value{}, false
+	}
+	return allocatePointer(elemType.Elem(), converted), true
+}
+
 // convertSliceElements builds a []t-shaped slice from src converting each
 // element, keeping the zero value for elements that cannot convert and
 // allocating a pointer for elements that convert to a pointer element's base
@@ -473,17 +482,9 @@ func convertFieldValue(t reflect.Type, src reflect.Value) (reflect.Value, int, b
 func convertSliceElements(t reflect.Type, src reflect.Value) (reflect.Value, int, bool) {
 	slice := reflect.MakeSlice(t, src.Len(), src.Len())
 	elemType := t.Elem()
-	elemIsPointer := elemType.Kind() == reflect.Pointer
-	if elemIsPointer {
-		elemType = elemType.Elem()
-	}
 	for i := range src.Len() {
-		converted, ok := convertValue(concreteValue(src.Index(i)), elemType)
+		converted, ok := convertElement(elemType, concreteValue(src.Index(i)))
 		if !ok {
-			continue
-		}
-		if elemIsPointer {
-			slice.Index(i).Set(allocatePointer(elemType, converted))
 			continue
 		}
 		slice.Index(i).Set(converted)
@@ -494,17 +495,7 @@ func convertSliceElements(t reflect.Type, src reflect.Value) (reflect.Value, int
 // wrapSingleValueIntoSlice puts a single value into a one-element slice field,
 // allocating a pointer when the element type is one.
 func wrapSingleValueIntoSlice(t reflect.Type, src reflect.Value) (reflect.Value, int, bool) {
-	elemType := t.Elem()
-	if elemType.Kind() == reflect.Pointer {
-		converted, ok := convertValue(src, elemType.Elem())
-		if !ok {
-			return reflect.Value{}, 0, false
-		}
-		slice := reflect.MakeSlice(t, 1, 1)
-		slice.Index(0).Set(allocatePointer(elemType.Elem(), converted))
-		return slice, 0, true
-	}
-	converted, ok := convertValue(src, elemType)
+	converted, ok := convertElement(t.Elem(), src)
 	if !ok {
 		return reflect.Value{}, 0, false
 	}

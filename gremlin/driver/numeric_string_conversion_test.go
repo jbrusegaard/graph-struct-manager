@@ -17,6 +17,8 @@ type conversionVertex struct {
 	Quantity   int       `gremlin:"quantity"`
 	Ratio      float64   `gremlin:"ratio"`
 	Ports      []int32   `gremlin:"ports"`
+	AnyValue   any       `gremlin:"anyValue"`
+	Fixed      [4]byte   `gremlin:"fixed"`
 }
 
 // Gremlin backends return integers as int32/int64. Go's reflect package treats
@@ -145,6 +147,24 @@ func TestIntegerStringConversions(t *testing.T) {
 			check: func(t *testing.T, v *conversionVertex) {
 				if v.Ports != nil {
 					t.Errorf("Ports = %#v, want nil (must not load as rune codes {56 48})", v.Ports)
+				}
+			},
+		},
+		{
+			name: "StringLoadsIntoAnyField",
+			data: map[any]any{"anyValue": "abc"},
+			check: func(t *testing.T, v *conversionVertex) {
+				if v.AnyValue != "abc" {
+					t.Errorf("AnyValue = %#v, want \"abc\" (strings must survive into any fields)", v.AnyValue)
+				}
+			},
+		},
+		{
+			name: "StringLoadsIntoByteArrayField",
+			data: map[any]any{"fixed": "hell"},
+			check: func(t *testing.T, v *conversionVertex) {
+				if want := [4]byte{'h', 'e', 'l', 'l'}; v.Fixed != want {
+					t.Errorf("Fixed = %#v, want %#v", v.Fixed, want)
 				}
 			},
 		},
