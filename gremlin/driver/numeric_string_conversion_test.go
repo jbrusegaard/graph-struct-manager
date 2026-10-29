@@ -54,6 +54,31 @@ func TestIntegerPropertyDoesNotConvertToStringField(t *testing.T) {
 		},
 	)
 	t.Run(
+		"UnsignedIntegersLeaveStringFieldUntouched", func(t *testing.T) {
+			t.Parallel()
+			var v conversionVertex
+			err := driver.UnloadGremlinResultIntoStruct(
+				&v, &gremlingo.Result{Data: map[any]any{"rank": uint64(65)}},
+			)
+			if err != nil {
+				t.Fatalf("Error unloading gremlin result into struct: %v", err)
+			}
+			if v.Rank != "" {
+				t.Errorf("Rank should be left as the zero value, got %q", v.Rank)
+			}
+			var w conversionVertex
+			err = driver.UnloadGremlinResultIntoStruct(
+				&w, &gremlingo.Result{Data: map[any]any{"rank": uintptr(66)}},
+			)
+			if err != nil {
+				t.Fatalf("Error unloading gremlin result into struct: %v", err)
+			}
+			if w.Rank != "" {
+				t.Errorf("Rank should be left as the zero value, got %q", w.Rank)
+			}
+		},
+	)
+	t.Run(
 		"IntegerSliceDoesNotNarrowIntoStringField", func(t *testing.T) {
 			t.Parallel()
 			v := conversionVertex{Rank: "unchanged"}
