@@ -79,7 +79,7 @@ linters:
     exhaustive:
       check:
         - switch
-        - mapliteral
+        - map
     forbidigo:
       forbid:
         - pattern: ^(fmt|log)\.Print.*$

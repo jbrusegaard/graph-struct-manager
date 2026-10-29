@@ -11,7 +11,7 @@ first-setup:
 	pre-commit install
 
 .PHONY: go-lint
-go-lint: # requires golangci-lint >= 2.15.0
+go-lint:
 	golangci-lint fmt ./...
 	golangci-lint run --fix --allow-parallel-runners ./...
 
