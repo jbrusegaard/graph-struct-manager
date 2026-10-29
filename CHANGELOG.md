@@ -12,11 +12,13 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - An integer property no longer loads into a `string` field as a corrupted single
   character. Go treats integer-to-`string` as a convertible pair, but the conversion is
   a rune mapping, not a decimal rendering: `int32(42)` became `"*"` and `int64(2026)`
-  became `"ߪ"`. Integer-to-`string` is now rejected as the type mismatch it is, so a
-  mismatched scalar field (plain or pointer) keeps its zero (or existing) value like any
-  other unmatched property, while slice fields are rebuilt with rejected elements
-  becoming zero values, matching the existing nil-element behavior.
-  Numeric-to-numeric and `[]byte`-to-`string` conversions are unaffected.
+  became a stray code point. Integer-to-`string` now renders the decimal digits
+  (`"42"`, `"2026"`), so a load followed by a save keeps the number instead of writing
+  back a corrupted or zero value. The reverse direction is now guarded too: Go also
+  converts `string` to `[]rune` (which is `[]int32`), so a string property loading into
+  an `[]int32` field became character codes (`"80"` became `{56, 48}`); a `string` now
+  converts only to `string` or `[]byte`. Numeric-to-numeric and `[]byte`-to-`string`
+  conversions are unaffected.
 - A property holding several values no longer loads a single-valued field as its zero
   value. Every Neptune vertex property is set-cardinality, so a field that models one
   value still receives a list once the property holds more than one; the first value is
