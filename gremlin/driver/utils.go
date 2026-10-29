@@ -131,6 +131,25 @@ func unloadGremlinMapIntoStruct(v any, mapResult map[any]any) ([]NarrowedPropert
 	return narrowed, nil
 }
 
+// unloadEdgeField loads a gremlinEdge field from the preloaded value keyed by
+// the Go field name, recording the key as used when a used-keys set is being
+// tracked. Missing keys leave the field untouched.
+func unloadEdgeField(
+	fieldSchema *fieldSchema,
+	field reflect.Value,
+	stringMap map[string]any,
+	usedKeys map[string]struct{},
+) {
+	value, ok := stringMap[fieldSchema.goName]
+	if !ok {
+		return
+	}
+	if usedKeys != nil {
+		usedKeys[fieldSchema.goName] = struct{}{}
+	}
+	setEdgeFieldFromValue(field, value)
+}
+
 // unloadSchemaFields sets struct fields from the gremlin result map using
 // the cached field plan. Keys consumed by mapped fields are recorded in
 // usedKeys when it is non-nil. The returned slice lists properties whose
@@ -152,14 +171,7 @@ func unloadSchemaFields(
 
 		// gremlinEdge fields are loaded via Preload and keyed by the Go field name.
 		if fieldSchema.isEdge {
-			value, ok := stringMap[fieldSchema.goName]
-			if !ok {
-				continue
-			}
-			if usedKeys != nil {
-				usedKeys[fieldSchema.goName] = struct{}{}
-			}
-			setEdgeFieldFromValue(field, value)
+			unloadEdgeField(fieldSchema, field, stringMap, usedKeys)
 			continue
 		}
 
@@ -368,6 +380,33 @@ func concreteValue(v reflect.Value) reflect.Value {
 	return v
 }
 
+// isIntegerKind reports whether k is a signed or unsigned integer kind.
+func isIntegerKind(k reflect.Kind) bool {
+	switch k { //nolint:exhaustive // only integer kinds matter here
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+		reflect.Uintptr:
+		return true
+	default:
+		return false
+	}
+}
+
+// safeConvertible reports whether a value of type from may be silently
+// converted to type t. reflect classifies integer -> string as convertible,
+// but that conversion is a rune mapping, not a decimal rendering: int32(42)
+// becomes "*" and int64(2026) becomes "ߪ", silently corrupting the data.
+// Rejecting it makes an integer arriving at a string field a plain type
+// mismatch, so the field keeps its zero (or existing) value instead of
+// receiving mojibake. Legitimate conversions — numeric widening/narrowing,
+// []byte <-> string — stay allowed.
+func safeConvertible(from, t reflect.Type) bool {
+	if !from.ConvertibleTo(t) {
+		return false
+	}
+	return !isIntegerKind(from.Kind()) || t.Kind() != reflect.String
+}
+
 // convertFieldValue converts src into a value of t. Slices are converted
 // element-wise, keeping the zero value for elements that cannot convert and
 // allocating a pointer for elements that convert to a pointer element's base
@@ -388,7 +427,7 @@ func convertFieldValue(t reflect.Type, src reflect.Value) (reflect.Value, int, b
 		// Slice-to-array conversion panics on a length mismatch; leave the
 		// field untouched instead.
 		return reflect.Value{}, 0, false
-	case srcType.ConvertibleTo(t):
+	case safeConvertible(srcType, t):
 		return src.Convert(t), 0, true
 	case srcIsSlice && targetIsSlice:
 		slice := reflect.MakeSlice(t, src.Len(), src.Len())
@@ -399,7 +438,7 @@ func convertFieldValue(t reflect.Type, src reflect.Value) (reflect.Value, int, b
 		}
 		for i := range src.Len() {
 			elem := concreteValue(src.Index(i))
-			if !elem.IsValid() || !elem.Type().ConvertibleTo(elemType) {
+			if !elem.IsValid() || !safeConvertible(elem.Type(), elemType) {
 				continue
 			}
 			if elemIsPointer {
@@ -412,12 +451,12 @@ func convertFieldValue(t reflect.Type, src reflect.Value) (reflect.Value, int, b
 	case targetIsSlice:
 		// Handle case where field is a slice but gremlin result is a single value
 		elemType := t.Elem()
-		if elemType.Kind() == reflect.Pointer && srcType.ConvertibleTo(elemType.Elem()) {
+		if elemType.Kind() == reflect.Pointer && safeConvertible(srcType, elemType.Elem()) {
 			slice := reflect.MakeSlice(t, 1, 1)
 			slice.Index(0).Set(allocatePointer(elemType.Elem(), src.Convert(elemType.Elem())))
 			return slice, 0, true
 		}
-		if srcType.ConvertibleTo(elemType) {
+		if safeConvertible(srcType, elemType) {
 			slice := reflect.MakeSlice(t, 1, 1)
 			slice.Index(0).Set(src.Convert(elemType))
 			return slice, 0, true
@@ -435,7 +474,7 @@ func convertFieldValue(t reflect.Type, src reflect.Value) (reflect.Value, int, b
 // as its zero value.
 func narrowToFirstValue(t reflect.Type, src reflect.Value) (reflect.Value, int, bool) {
 	first := concreteValue(src.Index(0))
-	if !first.IsValid() || !first.Type().ConvertibleTo(t) {
+	if !first.IsValid() || !safeConvertible(first.Type(), t) {
 		return reflect.Value{}, 0, false
 	}
 	return first.Convert(t), src.Len() - 1, true
