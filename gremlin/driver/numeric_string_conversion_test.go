@@ -141,6 +141,31 @@ func TestIntegerPropertyDoesNotConvertToStringField(t *testing.T) {
 		},
 	)
 	t.Run(
+		"StringDoesNotDecodeIntoIntegerFields", func(t *testing.T) {
+			t.Parallel()
+			var v conversionVertex
+			err := driver.UnloadGremlinResultIntoStruct(
+				&v, &gremlingo.Result{Data: map[any]any{
+					"quantity": "42",
+					"ratio":    "3.5",
+					"weights":  []any{"7", "eight"},
+				}},
+			)
+			if err != nil {
+				t.Fatalf("Error unloading gremlin result into struct: %v", err)
+			}
+			if v.Quantity != 0 {
+				t.Errorf("Quantity should be left as the zero value, got %d", v.Quantity)
+			}
+			if v.Ratio != 0 {
+				t.Errorf("Ratio should be left as the zero value, got %v", v.Ratio)
+			}
+			if len(v.Weights) != 2 || v.Weights[1] != "eight" {
+				t.Errorf("String slice elements should load normally, got %v", v.Weights)
+			}
+		},
+	)
+	t.Run(
 		"NumericAndByteConversionsStillWork", func(t *testing.T) {
 			t.Parallel()
 			var v conversionVertex
