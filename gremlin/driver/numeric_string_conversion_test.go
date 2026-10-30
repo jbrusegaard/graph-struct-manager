@@ -65,6 +65,15 @@ func TestIntegerStringConversions(t *testing.T) {
 			},
 		},
 		{
+			name: "UintptrLoadsAsDecimalText",
+			data: map[any]any{"rank": uintptr(7)},
+			check: func(t *testing.T, v *conversionVertex) {
+				if v.Rank != "7" {
+					t.Errorf("Rank = %q, want %q (decimal text, not rune '\\a')", v.Rank, "7")
+				}
+			},
+		},
+		{
 			name:  "IntegerNarrowsToFirstAsDecimalText",
 			data:  map[any]any{"rank": []any{int32(1), int32(2)}},
 			start: &conversionVertex{Rank: "unchanged"},
@@ -155,7 +164,10 @@ func TestIntegerStringConversions(t *testing.T) {
 			data: map[any]any{"anyValue": "abc"},
 			check: func(t *testing.T, v *conversionVertex) {
 				if v.AnyValue != "abc" {
-					t.Errorf("AnyValue = %#v, want \"abc\" (strings must survive into any fields)", v.AnyValue)
+					t.Errorf(
+						"AnyValue = %#v, want \"abc\" (strings must survive into any fields)",
+						v.AnyValue,
+					)
 				}
 			},
 		},
