@@ -9,6 +9,20 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- An integer property no longer loads into a `string` field as a corrupted single
+  character. Go treats integer-to-`string` as a convertible pair, but the conversion is
+  a rune mapping, not a decimal rendering: `int32(42)` became `"*"` and `int64(2026)`
+  became a stray code point. Integer-to-`string` now renders the decimal digits
+  (`"42"`, `"2026"`), so a load followed by a save keeps the digits instead of writing
+  back a corrupted or zero value. Note the limit: a field modelled as `string` holds
+  text after a load, so saving writes a String property back to Neptune; a numeric
+  predicate such as `Where("rank", comparator.EQ, 42)` will not match a vertex whose
+  numeric property was modelled as `string`. Model large integers as `int64` to keep the
+  property numeric through a round trip. The reverse direction is now guarded too: Go
+  also converts `string` to `[]rune` (which is `[]int32`), so a string property loading
+  into an `[]int32` field became character codes (`"80"` became `{56, 48}`); a `string`
+  now converts only to `string` or `[]byte`. Numeric-to-numeric and `[]byte`-to-`string`
+  conversions are unaffected.
 - A property holding several values no longer loads a single-valued field as its zero
   value. Every Neptune vertex property is set-cardinality, so a field that models one
   value still receives a list once the property holds more than one; the first value is

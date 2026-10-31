@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strconv"
 
 	gremlingo "github.com/apache/tinkerpop/gremlin-go/v3/driver"
 	"github.com/jbrusegaard/graph-struct-manager/gsmtypes"
@@ -131,6 +132,25 @@ func unloadGremlinMapIntoStruct(v any, mapResult map[any]any) ([]NarrowedPropert
 	return narrowed, nil
 }
 
+// unloadEdgeField loads a gremlinEdge field from the preloaded value keyed by
+// the Go field name, recording the key as used when a used-keys set is being
+// tracked. Missing keys leave the field untouched.
+func unloadEdgeField(
+	fieldSchema *fieldSchema,
+	field reflect.Value,
+	stringMap map[string]any,
+	usedKeys map[string]struct{},
+) {
+	value, ok := stringMap[fieldSchema.goName]
+	if !ok {
+		return
+	}
+	if usedKeys != nil {
+		usedKeys[fieldSchema.goName] = struct{}{}
+	}
+	setEdgeFieldFromValue(field, value)
+}
+
 // unloadSchemaFields sets struct fields from the gremlin result map using
 // the cached field plan. Keys consumed by mapped fields are recorded in
 // usedKeys when it is non-nil. The returned slice lists properties whose
@@ -152,14 +172,7 @@ func unloadSchemaFields(
 
 		// gremlinEdge fields are loaded via Preload and keyed by the Go field name.
 		if fieldSchema.isEdge {
-			value, ok := stringMap[fieldSchema.goName]
-			if !ok {
-				continue
-			}
-			if usedKeys != nil {
-				usedKeys[fieldSchema.goName] = struct{}{}
-			}
-			setEdgeFieldFromValue(field, value)
+			unloadEdgeField(fieldSchema, field, stringMap, usedKeys)
 			continue
 		}
 
@@ -368,6 +381,51 @@ func concreteValue(v reflect.Value) reflect.Value {
 	return v
 }
 
+// safeConvertible reports whether a value of type from may be silently
+// converted to type t. Go classifies string <-> []rune (which is []int32) as
+// convertible, but that conversion is a code-point mapping, not a parse:
+// "80" would load into []int32 as {56, 48}. Only that case is blocked;
+// everything else ConvertibleTo allows — numeric widening/narrowing,
+// []byte <-> string, boxing into any — stays through.
+// Integer -> string is handled with decimal formatting by convertValue.
+func safeConvertible(from, t reflect.Type) bool {
+	if !from.ConvertibleTo(t) {
+		return false
+	}
+	if from.Kind() == reflect.String && t.Kind() == reflect.Slice ||
+		from.Kind() == reflect.Slice && t.Kind() == reflect.String {
+		other := t
+		if from.Kind() == reflect.Slice {
+			other = from
+		}
+		return other.Elem().Kind() == reflect.Uint8
+	}
+	return true
+}
+
+// convertValue converts src to type t, rendering integer sources as decimal
+// text when the target is a string — reflect's own conversion is a rune
+// mapping, so int32(42) would become "*" and int64(2026) would become "ߪ".
+// Formatting the digits keeps the load -> save round trip lossless: a skipped
+// field would save its zero value back over the stored number.
+func convertValue(src reflect.Value, t reflect.Type) (reflect.Value, bool) {
+	if !src.IsValid() {
+		return reflect.Value{}, false
+	}
+	if t.Kind() == reflect.String {
+		switch {
+		case src.CanInt():
+			return reflect.ValueOf(strconv.FormatInt(src.Int(), 10)).Convert(t), true
+		case src.CanUint():
+			return reflect.ValueOf(strconv.FormatUint(src.Uint(), 10)).Convert(t), true
+		}
+	}
+	if !safeConvertible(src.Type(), t) {
+		return reflect.Value{}, false
+	}
+	return src.Convert(t), true
+}
+
 // convertFieldValue converts src into a value of t. Slices are converted
 // element-wise, keeping the zero value for elements that cannot convert and
 // allocating a pointer for elements that convert to a pointer element's base
@@ -383,49 +441,67 @@ func convertFieldValue(t reflect.Type, src reflect.Value) (reflect.Value, int, b
 	srcIsSlice := srcType.Kind() == reflect.Slice
 	targetIsSlice := t.Kind() == reflect.Slice
 
-	switch {
-	case srcIsSlice && t.Kind() == reflect.Array && src.Len() != t.Len():
+	if srcIsSlice && t.Kind() == reflect.Array && src.Len() != t.Len() {
 		// Slice-to-array conversion panics on a length mismatch; leave the
 		// field untouched instead.
 		return reflect.Value{}, 0, false
-	case srcType.ConvertibleTo(t):
-		return src.Convert(t), 0, true
+	}
+	if converted, ok := convertValue(src, t); ok {
+		return converted, 0, true
+	}
+	switch {
 	case srcIsSlice && targetIsSlice:
-		slice := reflect.MakeSlice(t, src.Len(), src.Len())
-		elemType := t.Elem()
-		elemIsPointer := elemType.Kind() == reflect.Pointer
-		if elemIsPointer {
-			elemType = elemType.Elem()
-		}
-		for i := range src.Len() {
-			elem := concreteValue(src.Index(i))
-			if !elem.IsValid() || !elem.Type().ConvertibleTo(elemType) {
-				continue
-			}
-			if elemIsPointer {
-				slice.Index(i).Set(allocatePointer(elemType, elem.Convert(elemType)))
-				continue
-			}
-			slice.Index(i).Set(elem.Convert(elemType))
-		}
-		return slice, 0, true
+		return convertSliceElements(t, src)
 	case targetIsSlice:
 		// Handle case where field is a slice but gremlin result is a single value
-		elemType := t.Elem()
-		if elemType.Kind() == reflect.Pointer && srcType.ConvertibleTo(elemType.Elem()) {
-			slice := reflect.MakeSlice(t, 1, 1)
-			slice.Index(0).Set(allocatePointer(elemType.Elem(), src.Convert(elemType.Elem())))
-			return slice, 0, true
-		}
-		if srcType.ConvertibleTo(elemType) {
-			slice := reflect.MakeSlice(t, 1, 1)
-			slice.Index(0).Set(src.Convert(elemType))
-			return slice, 0, true
-		}
+		return wrapSingleValueIntoSlice(t, src)
 	case srcIsSlice && src.Len() > 0:
 		return narrowToFirstValue(t, src)
 	}
 	return reflect.Value{}, 0, false
+}
+
+// convertElement converts v to elemType, allocating a pointer when the
+// element type is one. Shared by the slice-element loop and the
+// single-value wrap so the pointer branch lives in exactly one place.
+func convertElement(elemType reflect.Type, v reflect.Value) (reflect.Value, bool) {
+	if elemType.Kind() != reflect.Pointer {
+		return convertValue(v, elemType)
+	}
+	converted, ok := convertValue(v, elemType.Elem())
+	if !ok {
+		return reflect.Value{}, false
+	}
+	return allocatePointer(elemType.Elem(), converted), true
+}
+
+// convertSliceElements builds a []t-shaped slice from src converting each
+// element, keeping the zero value for elements that cannot convert and
+// allocating a pointer for elements that convert to a pointer element's base
+// type.
+func convertSliceElements(t reflect.Type, src reflect.Value) (reflect.Value, int, bool) {
+	slice := reflect.MakeSlice(t, src.Len(), src.Len())
+	elemType := t.Elem()
+	for i := range src.Len() {
+		converted, ok := convertElement(elemType, concreteValue(src.Index(i)))
+		if !ok {
+			continue
+		}
+		slice.Index(i).Set(converted)
+	}
+	return slice, 0, true
+}
+
+// wrapSingleValueIntoSlice puts a single value into a one-element slice field,
+// allocating a pointer when the element type is one.
+func wrapSingleValueIntoSlice(t reflect.Type, src reflect.Value) (reflect.Value, int, bool) {
+	converted, ok := convertElement(t.Elem(), src)
+	if !ok {
+		return reflect.Value{}, 0, false
+	}
+	slice := reflect.MakeSlice(t, 1, 1)
+	slice.Index(0).Set(converted)
+	return slice, 0, true
 }
 
 // narrowToFirstValue fits a multi-valued property into a single-valued field.
@@ -434,11 +510,11 @@ func convertFieldValue(t reflect.Type, src reflect.Value) (reflect.Value, int, b
 // first value loses less than dropping the property, which would load the field
 // as its zero value.
 func narrowToFirstValue(t reflect.Type, src reflect.Value) (reflect.Value, int, bool) {
-	first := concreteValue(src.Index(0))
-	if !first.IsValid() || !first.Type().ConvertibleTo(t) {
+	converted, ok := convertValue(concreteValue(src.Index(0)), t)
+	if !ok {
 		return reflect.Value{}, 0, false
 	}
-	return first.Convert(t), src.Len() - 1, true
+	return converted, src.Len() - 1, true
 }
 
 // setEdgeFieldFromValue assigns preloaded related vertices into a gremlinEdge
