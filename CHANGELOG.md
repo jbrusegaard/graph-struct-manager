@@ -14,7 +14,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   a rune mapping, not a decimal rendering: `int32(42)` became `"*"` and `int64(2026)`
   became a stray code point. Integer-to-`string` now renders the decimal digits
   (`"42"`, `"2026"`), so a load followed by a save keeps the digits instead of writing
-  back a corrupted or zero value. Note the limit: a field modelled as `string` holds
+  back a corrupted or zero value. Floating-point sources are rendered the same way
+  (`float64(3.5)` becomes `"3.5"`, `float64(8)` becomes `"8"`); previously a float
+  arriving at a `string` field was skipped and the field loaded as its zero value.
+  Note the limit: a field modelled as `string` holds
   text after a load, so saving writes a String property back to Neptune; a numeric
   predicate such as `Where("rank", comparator.EQ, 42)` will not match a vertex whose
   numeric property was modelled as `string`. Model large integers as `int64` to keep the

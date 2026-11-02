@@ -14,11 +14,13 @@ type conversionVertex struct {
 	Weights    []string  `gremlin:"weights"`
 	PtrWeights []*string `gremlin:"ptrWeights"`
 	Score      *string   `gremlin:"score"`
+	RatioText  string    `gremlin:"ratioText"`
 	Quantity   int       `gremlin:"quantity"`
 	Ratio      float64   `gremlin:"ratio"`
 	Ports      []int32   `gremlin:"ports"`
 	AnyValue   any       `gremlin:"anyValue"`
 	Fixed      [4]byte   `gremlin:"fixed"`
+	FixedList  [][4]byte `gremlin:"fixedList"`
 }
 
 // Gremlin backends return integers as int32/int64. Go's reflect package treats
@@ -27,7 +29,8 @@ type conversionVertex struct {
 // Loading must render the decimal digits so a load -> save round trip keeps
 // the number, and the reverse direction must reject string -> []int32, which
 // reflect also allows via []rune and would load "80" as the character codes
-// {56, 48}.
+// {56, 48}. Float sources render as their shortest round-trip decimal ("3.5",
+// "8") rather than being skipped to the zero value.
 func TestIntegerStringConversions(t *testing.T) {
 	t.Parallel()
 
@@ -70,6 +73,24 @@ func TestIntegerStringConversions(t *testing.T) {
 			check: func(t *testing.T, v *conversionVertex) {
 				if v.Rank != "7" {
 					t.Errorf("Rank = %q, want %q (decimal text, not rune '\\a')", v.Rank, "7")
+				}
+			},
+		},
+		{
+			name: "FloatLoadsAsDecimalText",
+			data: map[any]any{"ratioText": float64(3.5)},
+			check: func(t *testing.T, v *conversionVertex) {
+				if v.RatioText != "3.5" {
+					t.Errorf("RatioText = %q, want %q (shortest round-trip decimal)", v.RatioText, "3.5")
+				}
+			},
+		},
+		{
+			name: "WholeFloatDropsTrailingZero",
+			data: map[any]any{"ratioText": float64(8)},
+			check: func(t *testing.T, v *conversionVertex) {
+				if v.RatioText != "8" {
+					t.Errorf("RatioText = %q, want %q", v.RatioText, "8")
 				}
 			},
 		},
@@ -225,5 +246,35 @@ func TestIntegerStringConversions(t *testing.T) {
 			}
 			tc.check(t, &v)
 		})
+	}
+}
+
+// Slice-to-array conversion panics on a length mismatch. The guard lives in
+// convertValue so it catches both tagged fields and slice elements; a []byte
+// shorter than the array length must skip the element, not crash the load.
+func TestSliceToArrayLengthMismatchDoesNotPanic(t *testing.T) {
+	t.Parallel()
+
+	v := conversionVertex{}
+	err := driver.UnloadGremlinResultIntoStruct(
+		&v, &gremlingo.Result{Data: map[any]any{
+			"fixedList": []any{[]byte{0, 0}, []byte{1, 2, 3, 4}},
+			"fixed":     []byte{1, 2},
+		}},
+	)
+	if err != nil {
+		t.Fatalf("Error unloading gremlin result into struct: %v", err)
+	}
+	if len(v.FixedList) != 2 {
+		t.Fatalf("FixedList = %v, want two elements", v.FixedList)
+	}
+	if v.FixedList[0] != [4]byte{} {
+		t.Errorf("FixedList[0] = %v, want zero array (length mismatch skipped)", v.FixedList[0])
+	}
+	if v.FixedList[1] != [4]byte{1, 2, 3, 4} {
+		t.Errorf("FixedList[1] = %v, want [1 2 3 4]", v.FixedList[1])
+	}
+	if v.Fixed != [4]byte{} {
+		t.Errorf("Fixed = %v, want zero array (length mismatch skipped)", v.Fixed)
 	}
 }

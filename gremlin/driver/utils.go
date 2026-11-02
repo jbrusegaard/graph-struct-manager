@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-	"strconv"
 
 	gremlingo "github.com/apache/tinkerpop/gremlin-go/v3/driver"
 	"github.com/jbrusegaard/graph-struct-manager/gsmtypes"
@@ -403,22 +402,25 @@ func safeConvertible(from, t reflect.Type) bool {
 	return true
 }
 
-// convertValue converts src to type t, rendering integer sources as decimal
-// text when the target is a string — reflect's own conversion is a rune
-// mapping, so int32(42) would become "*" and int64(2026) would become "ߪ".
-// Formatting the digits keeps the load -> save round trip lossless: a skipped
-// field would save its zero value back over the stored number.
+// convertValue converts src to type t, rendering numeric sources (signed,
+// unsigned, and floating point) as decimal text when the target is a string —
+// reflect's own conversion is a rune mapping, so int32(42) would become "*"
+// and int64(2026) would become "ߪ". Formatting the digits keeps the load ->
+// save round trip lossless: a skipped field would save its zero value back
+// over the stored number. fmt.Sprint's %v is the shortest representation
+// that reads back as the same value (8.0 renders "8", 3.5 renders "3.5").
 func convertValue(src reflect.Value, t reflect.Type) (reflect.Value, bool) {
 	if !src.IsValid() {
 		return reflect.Value{}, false
 	}
-	if t.Kind() == reflect.String {
-		switch {
-		case src.CanInt():
-			return reflect.ValueOf(strconv.FormatInt(src.Int(), 10)).Convert(t), true
-		case src.CanUint():
-			return reflect.ValueOf(strconv.FormatUint(src.Uint(), 10)).Convert(t), true
-		}
+	if src.Kind() == reflect.Slice && t.Kind() == reflect.Array && src.Len() != t.Len() {
+		// Slice-to-array conversion panics on a length mismatch; leave the
+		// field untouched instead. Covers slice elements as well as fields.
+		return reflect.Value{}, false
+	}
+	if t.Kind() == reflect.String && (src.CanInt() || src.CanUint() || src.CanFloat()) {
+		text := fmt.Sprint(src.Interface())
+		return reflect.ValueOf(text).Convert(t), true
 	}
 	if !safeConvertible(src.Type(), t) {
 		return reflect.Value{}, false
@@ -441,11 +443,6 @@ func convertFieldValue(t reflect.Type, src reflect.Value) (reflect.Value, int, b
 	srcIsSlice := srcType.Kind() == reflect.Slice
 	targetIsSlice := t.Kind() == reflect.Slice
 
-	if srcIsSlice && t.Kind() == reflect.Array && src.Len() != t.Len() {
-		// Slice-to-array conversion panics on a length mismatch; leave the
-		// field untouched instead.
-		return reflect.Value{}, 0, false
-	}
 	if converted, ok := convertValue(src, t); ok {
 		return converted, 0, true
 	}
