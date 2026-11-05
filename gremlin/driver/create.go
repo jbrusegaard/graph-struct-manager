@@ -2,6 +2,7 @@ package driver
 
 import (
 	"errors"
+	"fmt"
 	"reflect"
 	"time"
 
@@ -66,7 +67,7 @@ func updateVertex[T any](db *GremlinDriver, value *T) error {
 	db.logTraversal(query)
 	_, err = query.Next()
 	if err != nil {
-		return err
+		return fmt.Errorf("update vertex %v: %w", id, err)
 	}
 	return runAfterUpdateHook(db, value)
 }
@@ -109,7 +110,7 @@ func createVertex[T any](db *GremlinDriver, value *T) error {
 	db.logTraversal(query)
 	vertexID, err := query.Next()
 	if err != nil {
-		return err
+		return fmt.Errorf("create vertex: %w", err)
 	}
 	vertex.SetVertexID(vertexID.GetInterface())
 	return runAfterCreateHook(db, value)

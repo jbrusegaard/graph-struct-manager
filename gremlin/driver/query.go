@@ -328,7 +328,7 @@ func (q *Query[T]) Find() ([]T, error) {
 	q.db.logTraversal(query)
 	queryResults, err := query.ToList()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query find: %w", err)
 	}
 
 	results := make([]T, 0, len(queryResults))
@@ -366,7 +366,7 @@ func (q *Query[T]) Take() (T, error) {
 		if isGremlinNotFoundErr(err) {
 			return v, gsmtypes.ErrNotFound
 		}
-		return v, err
+		return v, fmt.Errorf("query take: %w", err)
 	}
 
 	narrowed, unloadErr := UnloadGremlinResultIntoStructReportingNarrowed(&v, result)
@@ -397,7 +397,7 @@ func (q *Query[T]) Count() (int, error) {
 	}
 	num, err := result.GetInt()
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("query count: %w", err)
 	}
 	return num, nil
 }
@@ -431,7 +431,7 @@ func (q *Query[T]) ID(id any) (T, error) {
 		if isGremlinNotFoundErr(err) {
 			return v, gsmtypes.ErrNotFound
 		}
-		return v, err
+		return v, fmt.Errorf("query id lookup: %w", err)
 	}
 	narrowed, unloadErr := UnloadGremlinResultIntoStructReportingNarrowed(&v, result)
 	if unloadErr != nil {

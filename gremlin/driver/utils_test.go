@@ -11,10 +11,10 @@ import (
 )
 
 type testVertexWithoutAnonymousVertex struct {
-	ID           string    `json:"id" gremlin:"id"`
+	ID           string    `json:"id"            gremlin:"id"`
 	LastModified time.Time `json:"last_modified" gremlin:"last_modified"`
 	CreatedAt    time.Time `json:"created_at"    gremlin:"created_at"`
-	Name         string    `json:"name" gremlin:"name"`
+	Name         string    `json:"name"          gremlin:"name"`
 }
 
 func (t *testVertexWithoutAnonymousVertex) GetVertexID() any {
@@ -34,7 +34,8 @@ func (t *testVertexWithoutAnonymousVertex) Label() string {
 }
 
 func (t *testVertexWithoutAnonymousVertex) SetVertexID(id any) {
-	t.ID = id.(string)
+	s, _ := id.(string)
+	t.ID = s
 }
 
 func (t *testVertexWithoutAnonymousVertex) SetVertexLastModified(lastModified time.Time) {
@@ -43,6 +44,39 @@ func (t *testVertexWithoutAnonymousVertex) SetVertexLastModified(lastModified ti
 
 func (t *testVertexWithoutAnonymousVertex) SetVertexCreatedAt(createdAt time.Time) {
 	t.CreatedAt = createdAt
+}
+
+// TestVertexWithoutAnonymousVertex exercises the fixture built in #23 whose
+// table case never landed: a value that satisfies gsmtypes.VertexType through
+// hand-written methods but lacks the embedded gsmtypes.Vertex field. The
+// reflection guard must reject it even though the interface assertion passes.
+func TestVertexWithoutAnonymousVertex(t *testing.T) {
+	t.Parallel()
+	v := &testVertexWithoutAnonymousVertex{Name: "iface"}
+	now := time.Now().UTC()
+	v.SetVertexID("abc")
+	v.SetVertexLastModified(now)
+	v.SetVertexCreatedAt(now)
+	if v.GetVertexID() != "abc" {
+		t.Errorf("GetVertexID() = %v, want abc", v.GetVertexID())
+	}
+	if !v.GetVertexLastModified().Equal(now) {
+		t.Errorf("GetVertexLastModified() = %v, want %v", v.GetVertexLastModified(), now)
+	}
+	if !v.GetVertexCreatedAt().Equal(now) {
+		t.Errorf("GetVertexCreatedAt() = %v, want %v", v.GetVertexCreatedAt(), now)
+	}
+	if v.Label() != "" {
+		t.Errorf("Label() = %q, want empty", v.Label())
+	}
+	err := driver.ValidateStructPointerWithAnonymousVertexForTest(v)
+	if err == nil || err.Error() != "struct must contain anonymous types.Vertex field" {
+		t.Errorf(
+			"ValidateStructPointerWithAnonymousVertexForTest() = %v, "+
+				"want anonymous types.Vertex error",
+			err,
+		)
+	}
 }
 
 type testVertexForUtils struct {
@@ -80,7 +114,7 @@ func (t *testVertexWithExtras) SetUnmappedProperties(props map[string]any) {
 type testVertexWithMultipleExtras struct {
 	gsmtypes.Vertex
 	Name     string         `json:"name"     gremlin:"name"`
-	Extras   map[string]any `json:"extras"  `
+	Extras   map[string]any `json:"extras"`
 	ExtrasV2 map[string]any `json:"extrasV2"`
 }
 
@@ -97,7 +131,7 @@ type testVertexWithInvalidExtras struct {
 
 type testVertexWithUnmappedInterface struct {
 	gsmtypes.Vertex
-	Name     string         `json:"name" gremlin:"name"`
+	Name     string         `json:"name"     gremlin:"name"`
 	Unmapped map[string]any `json:"unmapped"`
 }
 
@@ -137,7 +171,7 @@ type testVertexWithArrayField struct {
 type testVertexWithPointerSlices struct {
 	gsmtypes.Vertex
 	Names []*string `json:"names" gremlin:"names"`
-	Age   []*int64  `json:"age" gremlin:"age"`
+	Age   []*int64  `json:"age"   gremlin:"age"`
 }
 
 // Label implements a custom label function
@@ -242,7 +276,7 @@ func TestUtils(t *testing.T) {
 			if !ok || len(tags) != 2 {
 				t.Errorf("Extras should contain slice field")
 			}
-			if _, ok := v.Extras["name"]; ok {
+			if _, present := v.Extras["name"]; present {
 				t.Errorf("Extras should not contain mapped fields")
 			}
 		},

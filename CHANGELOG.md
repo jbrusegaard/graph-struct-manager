@@ -7,6 +7,15 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Errors from Gremlin server calls and custom `SerializerType`/`DeserializerType` hooks
+  are now wrapped with operation context (`fmt.Errorf("query find: %w", err)` and
+  similar) instead of being returned bare, so a failure names the operation that
+  produced it. `errors.Is` and `errors.As` still match through the chain; code that
+  matched exact error strings or type-asserted the raw driver error directly (for
+  example `err.(*gremlingo.GremlinError)`) should switch to `errors.As`.
+
 ### Fixed
 
 - An integer property no longer loads into a `string` field as a corrupted single

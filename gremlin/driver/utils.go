@@ -228,11 +228,19 @@ func recordNarrowed(
 // the method can be invoked.
 func serializeGremlinValue(rv reflect.Value) (string, error) {
 	if serializer, ok := reflect.TypeAssert[gsmtypes.SerializerType](rv); ok {
-		return serializer.SerializeGremlinValue()
+		serialized, err := serializer.SerializeGremlinValue()
+		if err != nil {
+			return "", fmt.Errorf("serialize %s: %w", rv.Type(), err)
+		}
+		return serialized, nil
 	}
 	if rv.CanAddr() {
 		if serializer, ok := reflect.TypeAssert[gsmtypes.SerializerType](rv.Addr()); ok {
-			return serializer.SerializeGremlinValue()
+			serialized, err := serializer.SerializeGremlinValue()
+			if err != nil {
+				return "", fmt.Errorf("serialize %s: %w", rv.Type(), err)
+			}
+			return serialized, nil
 		}
 	}
 	ptr := reflect.New(rv.Type())
@@ -241,7 +249,11 @@ func serializeGremlinValue(rv reflect.Value) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("type %s does not implement gsmtypes.SerializerType", rv.Type())
 	}
-	return serializer.SerializeGremlinValue()
+	serialized, err := serializer.SerializeGremlinValue()
+	if err != nil {
+		return "", fmt.Errorf("serialize %s: %w", rv.Type(), err)
+	}
+	return serialized, nil
 }
 
 // maybeSerializeValue serializes value when it implements
@@ -258,7 +270,10 @@ func maybeSerializeValue(value any) (any, bool, error) {
 	}
 	if serializer, ok := value.(gsmtypes.SerializerType); ok {
 		serialized, err := serializer.SerializeGremlinValue()
-		return serialized, true, err
+		if err != nil {
+			return nil, true, fmt.Errorf("serialize %T: %w", value, err)
+		}
+		return serialized, true, nil
 	}
 	if rv.Kind() == reflect.Pointer ||
 		!reflect.PointerTo(rv.Type()).Implements(serializerInterfaceType) {
@@ -281,7 +296,7 @@ func deserializeGremlinValue(field reflect.Value, value any) error {
 		return fmt.Errorf("type %s does not implement gsmtypes.DeserializerType", field.Type())
 	}
 	if err := deserializer.DeserializeGremlinValue(value); err != nil {
-		return err
+		return fmt.Errorf("deserialize into %s: %w", field.Type(), err)
 	}
 	if field.Kind() == reflect.Pointer {
 		field.Set(target.Addr())
@@ -694,14 +709,14 @@ func nextWithDefaultValue[T any](
 ) (*gremlingo.Result, T, error) {
 	set, err := query.GetResultSet()
 	if err != nil {
-		return nil, defaultVal, err
+		return nil, defaultVal, fmt.Errorf("get result set: %w", err)
 	}
 	if set.IsEmpty() {
 		return nil, defaultVal, nil
 	}
 	result, _, err := set.One()
 	if err != nil {
-		return nil, defaultVal, err
+		return nil, defaultVal, fmt.Errorf("read one result: %w", err)
 	}
 	return result, defaultVal, nil
 }
