@@ -94,7 +94,7 @@ func TestPreload(t *testing.T) {
 
 	t.Run(
 		"TestPreloadSliceOut", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			_, topics := seedPreloadData(t, db)
 
 			result, err := driver.Model[testPerson](db).Preload("Topics").Take()
@@ -120,7 +120,7 @@ func TestPreload(t *testing.T) {
 
 	t.Run(
 		"TestPreloadDedup", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			person := testPerson{Name: "alice"}
 			if err := driver.Create(db, &person); err != nil {
 				t.Fatal(err)
@@ -161,7 +161,7 @@ func TestPreload(t *testing.T) {
 
 	t.Run(
 		"TestPreloadDedupNested", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			person := testPersonNested{Name: "alice"}
 			if err := driver.Create(db, &person); err != nil {
 				t.Fatal(err)
@@ -197,7 +197,7 @@ func TestPreload(t *testing.T) {
 
 	t.Run(
 		"TestPreloadWithFind", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			seedPreloadData(t, db)
 			// second person with no subscriptions
 			bob := testPerson{Name: "bob"}
@@ -229,7 +229,7 @@ func TestPreload(t *testing.T) {
 
 	t.Run(
 		"TestPreloadInDirection", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			person, topics := seedPreloadData(t, db)
 
 			result, err := driver.Model[testTopicWithSubscribers](db).
@@ -250,7 +250,7 @@ func TestPreload(t *testing.T) {
 
 	t.Run(
 		"TestPreloadPointerField", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			alice := testPerson{Name: "alice"}
 			bob := testPerson{Name: "bob"}
 			if err := driver.Create(db, &alice); err != nil {
@@ -291,7 +291,7 @@ func TestPreload(t *testing.T) {
 
 	t.Run(
 		"TestPreloadBothDirection", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			alice := testPerson{Name: "alice"}
 			bob := testPerson{Name: "bob"}
 			carol := testPerson{Name: "carol"}
@@ -318,7 +318,7 @@ func TestPreload(t *testing.T) {
 
 	t.Run(
 		"TestPreloadMultipleFields", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			person, _ := seedPreloadData(t, db)
 			bob := testPerson{Name: "bob"}
 			if err := driver.Create(db, &bob); err != nil {
@@ -344,7 +344,7 @@ func TestPreload(t *testing.T) {
 
 	t.Run(
 		"TestPreloadWithID", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			person, _ := seedPreloadData(t, db)
 
 			result, err := driver.Model[testPerson](db).Preload("Topics").ID(person.ID)
@@ -359,7 +359,7 @@ func TestPreload(t *testing.T) {
 
 	t.Run(
 		"TestPreloadNested", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			person := testPersonNested{Name: "alice"}
 			if err := driver.Create(db, &person); err != nil {
 				t.Fatal(err)
@@ -418,7 +418,7 @@ func TestPreload(t *testing.T) {
 
 	t.Run(
 		"TestPreloadNestedMergesWithParentPreload", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			person := testPersonNested{Name: "alice"}
 			if err := driver.Create(db, &person); err != nil {
 				t.Fatal(err)
@@ -456,7 +456,7 @@ func TestPreload(t *testing.T) {
 
 	t.Run(
 		"TestPreloadNestedMixedDirections", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			person, topics := seedPreloadData(t, db)
 			bob := testPerson{Name: "bob"}
 			if err := driver.Create(db, &bob); err != nil {
@@ -487,7 +487,7 @@ func TestPreload(t *testing.T) {
 
 	t.Run(
 		"TestPreloadNestedSelfReferential", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			person, topics := seedPreloadData(t, db)
 
 			// topic -[subscribed,in]-> person -[subscribed,out]-> topics
@@ -516,7 +516,7 @@ func TestPreload(t *testing.T) {
 
 	t.Run(
 		"TestPreloadNestedInvalidPathErrors", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			seedPreloadData(t, db)
 
 			_, err := driver.Model[testPersonNested](db).Preload("Topics.NotAField").Find()
@@ -537,7 +537,7 @@ func TestPreload(t *testing.T) {
 
 	t.Run(
 		"TestPreloadUnknownFieldErrors", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			seedPreloadData(t, db)
 
 			_, err := driver.Model[testPerson](db).Preload("NotAField").Find()
@@ -553,7 +553,7 @@ func TestPreload(t *testing.T) {
 
 	t.Run(
 		"TestPreloadFieldWithoutEdgeTagErrors", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			seedPreloadData(t, db)
 
 			_, err := driver.Model[testPerson](db).Preload("Name").Find()

@@ -31,8 +31,7 @@ func TestNewSlogLogger(t *testing.T) {
 			t.Errorf("output missing %s; got: %s", want, out)
 		}
 	}
-	// nil must fall back to slog.Default() instead of panicking on first use.
-	if gsmlog.NewSlogLogger(nil) == nil {
-		t.Fatal("NewSlogLogger(nil) returned nil")
-	}
+	// nil must fall back to slog.Default(): log through the adapter so a
+	// broken fallback panics here instead of leaving this assertion green.
+	gsmlog.NewSlogLogger(nil).Infof("nil fallback ok")
 }

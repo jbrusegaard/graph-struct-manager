@@ -87,7 +87,12 @@ func createEdge[E any](db *GremlinDriver, value *E, from any, to any) error {
 	edgeID, err := query.Next()
 	if err != nil {
 		if isGremlinNotFoundErr(err) {
-			return fmt.Errorf("create edge: from vertex %v not found", fromID)
+			// Gremlin reports empty-endpoint traversal failures identically
+			// for either end, so name both candidates and keep the cause.
+			return fmt.Errorf(
+				"create edge %s: endpoint vertex %v or %v not found: %w",
+				label, fromID, toID, err,
+			)
 		}
 		return fmt.Errorf("create edge %s: %w", label, err)
 	}

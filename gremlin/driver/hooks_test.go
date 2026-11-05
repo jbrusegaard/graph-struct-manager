@@ -99,7 +99,7 @@ func TestCreateHooksCreate(t *testing.T) {
 		t.Fatal(openErr)
 	}
 	defer db.Close()
-	t.Cleanup(cleanDB)
+	t.Cleanup(func() { cleanDB(t) })
 
 	vertex := &hookCreateVertex{Name: "hook-test"}
 	if err := driver.Create(db, vertex); err != nil {
@@ -138,7 +138,7 @@ func TestUpdateHooksUpdate(t *testing.T) {
 		t.Fatal(openErr)
 	}
 	defer db.Close()
-	t.Cleanup(cleanDB)
+	t.Cleanup(func() { cleanDB(t) })
 
 	vertex := &hookUpdateVertex{Name: "hook-test"}
 	if err := driver.Create(db, vertex); err != nil {
@@ -186,7 +186,7 @@ func TestAfterFindHooks(t *testing.T) {
 		t.Fatal(openErr)
 	}
 	defer db.Close()
-	t.Cleanup(cleanDB)
+	t.Cleanup(func() { cleanDB(t) })
 
 	vertices := []hookFindVertex{
 		{Name: "hook-find-1"},
@@ -244,7 +244,7 @@ func TestAfterFindHookError(t *testing.T) {
 		t.Fatal(openErr)
 	}
 	defer db.Close()
-	t.Cleanup(cleanDB)
+	t.Cleanup(func() { cleanDB(t) })
 
 	vertex := hookFindErrorVertex{Name: "hook-find-error"}
 	if err := driver.Create(db, &vertex); err != nil {

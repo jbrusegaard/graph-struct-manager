@@ -2,7 +2,6 @@ package driver_test
 
 import (
 	"errors"
-	"fmt"
 	"slices"
 	"testing"
 
@@ -25,19 +24,23 @@ func seedData(db *driver.GremlinDriver, data []testVertexForUtils) error {
 	return nil
 }
 
-func cleanDB() {
+func cleanDB(t *testing.T) {
+	t.Helper()
 	db, err := driver.Open(
 		DbURL, driver.Config{
 			Driver: dbDriver,
 		},
 	)
 	if err != nil {
-		panic(fmt.Errorf("cleanDB: open driver: %w", err))
+		t.Errorf("cleanDB: open driver: %v", err)
+		return
 	}
-	// A failed cleanup leaks state into the next test and points the failure
-	// at the wrong test; panic inside t.Cleanup surfaces it as a failure.
+	// Report through t so a transient cleanup failure fails exactly the test
+	// that registered it. A panic inside t.Cleanup would abort the whole test
+	// binary, silently skipping every not-yet-started test and blaming the
+	// failure on whichever test's cleanup happened to fire.
 	if dropErr := <-db.G().V().Drop().Iterate(); dropErr != nil {
-		panic(fmt.Errorf("cleanDB: drop vertices: %w", dropErr))
+		t.Errorf("cleanDB: drop vertices: %v", dropErr)
 	}
 }
 
@@ -78,7 +81,7 @@ func TestQuery(t *testing.T) {
 
 	t.Run(
 		"TestFindWhereFirst", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
@@ -106,7 +109,7 @@ func TestQuery(t *testing.T) {
 	for _, orderTest := range orderTests {
 		t.Run(
 			orderTest.Name, func(t *testing.T) {
-				t.Cleanup(cleanDB)
+				t.Cleanup(func() { cleanDB(t) })
 				err := seedData(db, seededData)
 				if err != nil {
 					t.Error(err)
@@ -136,7 +139,7 @@ func TestQuery(t *testing.T) {
 	}
 	t.Run(
 		"TestQueryWhereTraversal", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
@@ -155,7 +158,7 @@ func TestQuery(t *testing.T) {
 	)
 	t.Run(
 		"TestQueryPreQuery", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
@@ -177,7 +180,7 @@ func TestQuery(t *testing.T) {
 
 	t.Run(
 		"TestDelete", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
@@ -198,7 +201,7 @@ func TestQuery(t *testing.T) {
 
 	t.Run(
 		"TestQueryById", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
@@ -225,7 +228,7 @@ func TestQuery(t *testing.T) {
 
 	t.Run(
 		"TestIDWithInvalidLabel", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
@@ -242,7 +245,7 @@ func TestQuery(t *testing.T) {
 	)
 	t.Run(
 		"TestIDRespectsLabels", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
@@ -267,7 +270,7 @@ func TestQuery(t *testing.T) {
 	)
 	t.Run(
 		"TestQueryUpdateBadInput", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
@@ -280,7 +283,7 @@ func TestQuery(t *testing.T) {
 	)
 	t.Run(
 		"Test Update query with existing slice property", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
@@ -319,7 +322,7 @@ func TestQuery(t *testing.T) {
 	)
 	t.Run(
 		"TestQueryUpdatePointerToSliceUsesListCardinality", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			v := testVertexWithPointerFieldsForUpdate{
 				Name: "pointer-slice",
 				Tags: &[]string{"old1", "old2"},
@@ -357,7 +360,7 @@ func TestQuery(t *testing.T) {
 	)
 	t.Run(
 		"TestQueryUpdateNilPointerToSliceClearsProperty", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			v := testVertexWithPointerFieldsForUpdate{
 				Name: "pointer-slice-nil",
 				Tags: &[]string{"stale"},
@@ -389,7 +392,7 @@ func TestQuery(t *testing.T) {
 	)
 	t.Run(
 		"TestQueryUpdatePointerToScalarWritesValue", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			v := testVertexWithPointerFieldsForUpdate{Name: "pointer-scalar"}
 			err := driver.Create(db, &v)
 			if err != nil {
@@ -412,7 +415,7 @@ func TestQuery(t *testing.T) {
 	)
 	t.Run(
 		"TestQueryUpdatePointerFieldWithPlainValue", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			v := testVertexWithPointerFieldsForUpdate{
 				Name: "pointer-plain",
 				Tags: &[]string{"old"},
@@ -453,7 +456,7 @@ func TestQuery(t *testing.T) {
 	)
 	t.Run(
 		"TestQueryUpdateNilPointerToScalarWritesNull", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			status := "active"
 			v := testVertexWithPointerFieldsForUpdate{Name: "pointer-scalar-nil", Status: &status}
 			err := driver.Create(db, &v)
@@ -476,7 +479,7 @@ func TestQuery(t *testing.T) {
 	)
 	t.Run(
 		"TestQueryUpdateSingleCardinality", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
@@ -515,7 +518,7 @@ func TestQuery(t *testing.T) {
 	)
 	t.Run(
 		"TestSave", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
@@ -547,7 +550,7 @@ func TestQuery(t *testing.T) {
 	)
 	t.Run(
 		"TestUpdate", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
@@ -579,7 +582,7 @@ func TestQuery(t *testing.T) {
 	)
 	t.Run(
 		"TestUpdatesTargeted", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
@@ -630,7 +633,7 @@ func TestQuery(t *testing.T) {
 	)
 	t.Run(
 		"TestUpdatesWithSliceProperty", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
@@ -664,7 +667,7 @@ func TestQuery(t *testing.T) {
 	)
 	t.Run(
 		"TestUpdatesBadInput", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
@@ -693,7 +696,7 @@ func TestQuery(t *testing.T) {
 	)
 	t.Run(
 		"TestUpdatesRejectsID", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
@@ -706,7 +709,7 @@ func TestQuery(t *testing.T) {
 	)
 	t.Run(
 		"TestUpdatesEmptyMap", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
@@ -719,7 +722,7 @@ func TestQuery(t *testing.T) {
 	)
 	t.Run(
 		"TestRemovePropertySingle", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
@@ -756,7 +759,7 @@ func TestQuery(t *testing.T) {
 	)
 	t.Run(
 		"TestRemovePropertiesMultiple", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
@@ -789,7 +792,7 @@ func TestQuery(t *testing.T) {
 	)
 	t.Run(
 		"TestRemovePropertiesDuplicateNames", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
@@ -813,7 +816,7 @@ func TestQuery(t *testing.T) {
 	)
 	t.Run(
 		"TestRemovePropertyBadInput", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
@@ -826,7 +829,7 @@ func TestQuery(t *testing.T) {
 	)
 	t.Run(
 		"TestRemovePropertiesBadInputAborts", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
@@ -851,7 +854,7 @@ func TestQuery(t *testing.T) {
 	)
 	t.Run(
 		"TestRemovePropertiesRejectsID", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
@@ -864,7 +867,7 @@ func TestQuery(t *testing.T) {
 	)
 	t.Run(
 		"TestRemovePropertiesEmpty", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
@@ -877,7 +880,7 @@ func TestQuery(t *testing.T) {
 	)
 	t.Run(
 		"TestQueryIDs", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
@@ -899,7 +902,7 @@ func TestQuery(t *testing.T) {
 	)
 	t.Run(
 		"TestQueryAddSubTraversals", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
@@ -924,7 +927,7 @@ func TestQuery(t *testing.T) {
 	)
 	t.Run(
 		"TestCustomID", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 
 			testID, err := uuid.NewRandom()
 			if err != nil {
@@ -958,7 +961,7 @@ func TestQuery(t *testing.T) {
 	)
 	t.Run(
 		"Test Range Query", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
@@ -986,7 +989,7 @@ func TestQuery(t *testing.T) {
 	)
 	t.Run(
 		"Test Range Query with 2 as lower bound", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
@@ -1003,7 +1006,7 @@ func TestQuery(t *testing.T) {
 	)
 	t.Run(
 		"Test Range with offset already set", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
@@ -1019,7 +1022,7 @@ func TestQuery(t *testing.T) {
 	)
 	t.Run(
 		"TestQueryWhereIn", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
@@ -1045,7 +1048,7 @@ func TestQuery(t *testing.T) {
 	)
 	t.Run(
 		"TestQueryWhereWithout", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
@@ -1068,7 +1071,7 @@ func TestQuery(t *testing.T) {
 	)
 	t.Run(
 		"TestQueryWhereContains", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
@@ -1086,7 +1089,7 @@ func TestQuery(t *testing.T) {
 	)
 	t.Run(
 		"TestQueryWhereID", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
@@ -1108,7 +1111,7 @@ func TestQuery(t *testing.T) {
 	)
 	t.Run(
 		"TestQueryLimitOffset", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
@@ -1131,7 +1134,7 @@ func TestQuery(t *testing.T) {
 	)
 	t.Run(
 		"TestQueryIDsMultiple", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
@@ -1160,7 +1163,7 @@ func TestQuery(t *testing.T) {
 	)
 	t.Run(
 		"Test save with existing slice property", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
@@ -1204,7 +1207,7 @@ func TestQuery(t *testing.T) {
 	)
 	t.Run(
 		"Test Custom Error", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			_, err := driver.Model[testVertexForUtils](db).Take()
 			if !errors.Is(err, gsmtypes.ErrNotFound) {
 				t.Errorf("Expected ErrNotFound, got %v", err)
@@ -1213,7 +1216,7 @@ func TestQuery(t *testing.T) {
 	)
 	t.Run(
 		"Test Select", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
@@ -1243,7 +1246,7 @@ func TestQuery(t *testing.T) {
 	)
 	t.Run(
 		"Test Select with multiple fields", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
@@ -1268,7 +1271,7 @@ func TestQuery(t *testing.T) {
 	)
 	t.Run(
 		"Test select with random field names", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
@@ -1298,7 +1301,7 @@ func TestQuery(t *testing.T) {
 	)
 	t.Run(
 		"TestQueryScopes", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
@@ -1330,7 +1333,7 @@ func TestQuery(t *testing.T) {
 	)
 	t.Run(
 		"TestQueryScopesNilAndComposed", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
@@ -1357,7 +1360,7 @@ func TestQuery(t *testing.T) {
 	)
 	t.Run(
 		"Test Invalid Labels", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
@@ -1374,7 +1377,7 @@ func TestQuery(t *testing.T) {
 }
 
 func TestSaveReplacesSliceProperties(t *testing.T) {
-	t.Cleanup(cleanDB)
+	t.Cleanup(func() { cleanDB(t) })
 	db, openErr := driver.Open(
 		DbURL, driver.Config{
 			Driver: dbDriver,
@@ -1409,7 +1412,7 @@ func TestSaveReplacesSliceProperties(t *testing.T) {
 }
 
 func TestSaveKeepsUnrelatedProperties(t *testing.T) {
-	t.Cleanup(cleanDB)
+	t.Cleanup(func() { cleanDB(t) })
 	db, openErr := driver.Open(
 		DbURL, driver.Config{
 			Driver: dbDriver,
