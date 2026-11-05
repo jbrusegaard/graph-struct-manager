@@ -41,9 +41,7 @@ skills-lock.json
 .DS_Store
 .opencode/opencode.json
 .opencode/plugins/graphify.js
-CLAUDE.md
 
 # Verification-scratch artifacts (make patch-coverage / bench)
 patch_lines.tmp
 bench.txt
-AGENTS.md
