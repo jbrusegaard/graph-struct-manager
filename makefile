@@ -26,10 +26,10 @@ graph-link:
 	ln -sfn "$$MAIN/graphify-out" graphify-out; \
 	echo "Linked graphify-out -> $$MAIN/graphify-out"
 
-## Autofix lint + format issues
+## Autofix lint + format issues (golangci-lint version pinned here; keep in sync with CI and pre-commit)
 go-lint:
-	golangci-lint fmt ./...
-	golangci-lint run --fix --allow-parallel-runners ./...
+	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0 fmt ./...
+	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0 run --fix --allow-parallel-runners ./...
 
 ## Coverage percentage per package (quick, no gate)
 test-cov:

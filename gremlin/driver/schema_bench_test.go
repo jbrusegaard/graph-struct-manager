@@ -38,7 +38,7 @@ func BenchmarkUnloadMap(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
 		var v benchVertex
-		if err := unloadGremlinMapIntoStruct(&v, mapResult); err != nil {
+		if _, err := unloadGremlinMapIntoStruct(&v, mapResult); err != nil {
 			b.Fatal(err)
 		}
 	}
