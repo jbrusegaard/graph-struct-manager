@@ -95,7 +95,10 @@ func TestStructToMapSerialization(t *testing.T) {
 			}
 			encoded, ok := mapValue["attributes"].(string)
 			if !ok {
-				t.Fatalf("attributes should be serialized to string, got %T", mapValue["attributes"])
+				t.Fatalf(
+					"attributes should be serialized to string, got %T",
+					mapValue["attributes"],
+				)
 			}
 			var decoded testAttributes
 			if err := json.Unmarshal([]byte(encoded), &decoded); err != nil {

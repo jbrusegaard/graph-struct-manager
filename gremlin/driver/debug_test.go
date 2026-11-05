@@ -95,7 +95,11 @@ func TestLogTraversal(t *testing.T) {
 
 			if test.wantLine == "" {
 				if len(logger.infoLines) != 0 || len(logger.warnLines) != 0 {
-					t.Errorf("expected no log output, got info=%v warn=%v", logger.infoLines, logger.warnLines)
+					t.Errorf(
+						"expected no log output, got info=%v warn=%v",
+						logger.infoLines,
+						logger.warnLines,
+					)
 				}
 				return
 			}
@@ -114,6 +118,10 @@ func TestLogTraversalIgnoresNil(t *testing.T) {
 	db := &GremlinDriver{logger: logger, debug: true}
 	db.logTraversal(nil)
 	if len(logger.infoLines) != 0 || len(logger.warnLines) != 0 {
-		t.Errorf("expected no log output for a nil traversal, got info=%v warn=%v", logger.infoLines, logger.warnLines)
+		t.Errorf(
+			"expected no log output for a nil traversal, got info=%v warn=%v",
+			logger.infoLines,
+			logger.warnLines,
+		)
 	}
 }

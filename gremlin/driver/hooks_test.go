@@ -1,7 +1,7 @@
 package driver_test
 
 import (
-	"fmt"
+	"errors"
 	"testing"
 
 	"github.com/jbrusegaard/graph-struct-manager/gremlin/driver"
@@ -10,7 +10,7 @@ import (
 
 type hookCreateVertex struct {
 	gsmtypes.Vertex
-	Name     string `json:"name" gremlin:"name"`
+	Name     string `json:"name"      gremlin:"name"`
 	HookNote string `json:"hook_note" gremlin:"hook_note"`
 
 	beforeCreateCalled bool
@@ -38,7 +38,7 @@ func (v *hookCreateVertex) AfterCreate(db *driver.GremlinDriver) error {
 
 type hookUpdateVertex struct {
 	gsmtypes.Vertex
-	Name     string `json:"name" gremlin:"name"`
+	Name     string `json:"name"      gremlin:"name"`
 	HookNote string `json:"hook_note" gremlin:"hook_note"`
 
 	beforeUpdateCalled bool
@@ -66,7 +66,7 @@ func (v *hookUpdateVertex) AfterUpdate(db *driver.GremlinDriver) error {
 
 type hookFindVertex struct {
 	gsmtypes.Vertex
-	Name     string `json:"name" gremlin:"name"`
+	Name     string `json:"name"      gremlin:"name"`
 	HookNote string `json:"hook_note" gremlin:"hook_note"`
 
 	afterFindCalled bool
@@ -86,7 +86,7 @@ type hookFindErrorVertex struct {
 }
 
 func (v *hookFindErrorVertex) AfterFind(db *driver.GremlinDriver) error {
-	return fmt.Errorf("after find failed")
+	return errors.New("after find failed")
 }
 
 func TestCreateHooksCreate(t *testing.T) {

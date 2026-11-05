@@ -165,7 +165,7 @@ func TestDriverSave(t *testing.T) {
 type testVertexWithCustomLabel2 struct {
 	gsmtypes.Vertex
 	Name          string `json:"name" gremlin:"name"`
-	ComputedLabel string `json:"-" gremlin:"-"`
+	ComputedLabel string `json:"-"    gremlin:"-"`
 }
 
 func (t *testVertexWithCustomLabel2) Label() string {
@@ -190,7 +190,10 @@ func TestDriverSaveWithCustomLabel(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	vertex, err := driver.Model[testVertexWithCustomLabel2](db).Labels("You cant figure this out right?").Take()
+	vertex, err := driver.Model[testVertexWithCustomLabel2](
+		db,
+	).Labels("You cant figure this out right?").
+		Take()
 	if err != nil {
 		t.Error(err)
 	}

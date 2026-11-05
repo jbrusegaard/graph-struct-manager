@@ -11,10 +11,10 @@ import (
 )
 
 type testVertexWithoutAnonymousVertex struct {
-	ID           string    `json:"id" gremlin:"id"`
+	ID           string    `json:"id"            gremlin:"id"`
 	LastModified time.Time `json:"last_modified" gremlin:"last_modified"`
 	CreatedAt    time.Time `json:"created_at"    gremlin:"created_at"`
-	Name         string    `json:"name" gremlin:"name"`
+	Name         string    `json:"name"          gremlin:"name"`
 }
 
 func (t *testVertexWithoutAnonymousVertex) GetVertexID() any {
@@ -80,7 +80,7 @@ func (t *testVertexWithExtras) SetUnmappedProperties(props map[string]any) {
 type testVertexWithMultipleExtras struct {
 	gsmtypes.Vertex
 	Name     string         `json:"name"     gremlin:"name"`
-	Extras   map[string]any `json:"extras"  `
+	Extras   map[string]any `json:"extras"`
 	ExtrasV2 map[string]any `json:"extrasV2"`
 }
 
@@ -97,7 +97,7 @@ type testVertexWithInvalidExtras struct {
 
 type testVertexWithUnmappedInterface struct {
 	gsmtypes.Vertex
-	Name     string         `json:"name" gremlin:"name"`
+	Name     string         `json:"name"     gremlin:"name"`
 	Unmapped map[string]any `json:"unmapped"`
 }
 
@@ -137,7 +137,7 @@ type testVertexWithArrayField struct {
 type testVertexWithPointerSlices struct {
 	gsmtypes.Vertex
 	Names []*string `json:"names" gremlin:"names"`
-	Age   []*int64  `json:"age" gremlin:"age"`
+	Age   []*int64  `json:"age"   gremlin:"age"`
 }
 
 // Label implements a custom label function

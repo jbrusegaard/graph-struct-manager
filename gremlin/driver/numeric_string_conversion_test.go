@@ -81,7 +81,11 @@ func TestIntegerStringConversions(t *testing.T) {
 			data: map[any]any{"ratioText": float64(3.5)},
 			check: func(t *testing.T, v *conversionVertex) {
 				if v.RatioText != "3.5" {
-					t.Errorf("RatioText = %q, want %q (shortest round-trip decimal)", v.RatioText, "3.5")
+					t.Errorf(
+						"RatioText = %q, want %q (shortest round-trip decimal)",
+						v.RatioText,
+						"3.5",
+					)
 				}
 			},
 		},

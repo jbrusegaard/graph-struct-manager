@@ -245,7 +245,10 @@ func TestQuery(t *testing.T) {
 			}
 			// The default label for testVertexForUtils is "test_vertex_for_utils";
 			// querying with that explicit label should succeed.
-			result, err := driver.Model[testVertexForUtils](db).Labels("test_vertex_for_utils").ID(model.ID)
+			result, err := driver.Model[testVertexForUtils](
+				db,
+			).Labels("test_vertex_for_utils").
+				ID(model.ID)
 			if err != nil {
 				t.Errorf("Expected success with correct explicit label, got %v", err)
 			}
@@ -274,13 +277,19 @@ func TestQuery(t *testing.T) {
 			if err != nil {
 				t.Error(err)
 			}
-			err = driver.Model[testVertexForUtils](db).Where("name", comparator.EQ, "second").Update(
-				"listTest", []string{"this is new property value", "test"},
-			)
+			err = driver.Model[testVertexForUtils](
+				db,
+			).Where("name", comparator.EQ, "second").
+				Update(
+					"listTest", []string{"this is new property value", "test"},
+				)
 			if err != nil {
 				t.Error("error updating property", err)
 			}
-			model, err := driver.Model[testVertexForUtils](db).Where("name", comparator.EQ, "second").Take()
+			model, err := driver.Model[testVertexForUtils](
+				db,
+			).Where("name", comparator.EQ, "second").
+				Take()
 			if err != nil {
 				t.Error(err)
 			}
@@ -288,7 +297,10 @@ func TestQuery(t *testing.T) {
 				model.ListTest, "test",
 			) {
 				t.Errorf(
-					"Expected %s and %s, got %s and %s", "this is new property value", "test", model.ListTest[0],
+					"Expected %s and %s, got %s and %s",
+					"this is new property value",
+					"test",
+					model.ListTest[0],
 					model.ListTest[1],
 				)
 			}
@@ -500,7 +512,10 @@ func TestQuery(t *testing.T) {
 			if err != nil {
 				t.Error(err)
 			}
-			model, err := driver.Model[testVertexForUtils](db).Where("name", comparator.EQ, "first").Take()
+			model, err := driver.Model[testVertexForUtils](
+				db,
+			).Where("name", comparator.EQ, "first").
+				Take()
 			if err != nil {
 				t.Error(err)
 			}
@@ -510,7 +525,10 @@ func TestQuery(t *testing.T) {
 			if err != nil {
 				t.Error(err)
 			}
-			model, err = driver.Model[testVertexForUtils](db).Where("name", comparator.EQ, "fifth").Take()
+			model, err = driver.Model[testVertexForUtils](
+				db,
+			).Where("name", comparator.EQ, "fifth").
+				Take()
 			if err != nil {
 				t.Error(err)
 			}
@@ -526,7 +544,10 @@ func TestQuery(t *testing.T) {
 			if err != nil {
 				t.Error(err)
 			}
-			model, err := driver.Model[testVertexForUtils](db).Where("name", comparator.EQ, "first").Take()
+			model, err := driver.Model[testVertexForUtils](
+				db,
+			).Where("name", comparator.EQ, "first").
+				Take()
 			if err != nil {
 				t.Error(err)
 			}
@@ -536,7 +557,10 @@ func TestQuery(t *testing.T) {
 			if err != nil {
 				t.Error(err)
 			}
-			model, err = driver.Model[testVertexForUtils](db).Where("name", comparator.EQ, "fifth").Take()
+			model, err = driver.Model[testVertexForUtils](
+				db,
+			).Where("name", comparator.EQ, "fifth").
+				Take()
 			if err != nil {
 				t.Error(err)
 			}
@@ -559,16 +583,22 @@ func TestQuery(t *testing.T) {
 			if err != nil {
 				t.Error(err)
 			}
-			err = driver.Model[testVertexForUtils](db).Where("name", comparator.EQ, "second").Updates(
-				map[string]any{
-					"name": "updated",
-					"sort": 99,
-				},
-			)
+			err = driver.Model[testVertexForUtils](
+				db,
+			).Where("name", comparator.EQ, "second").
+				Updates(
+					map[string]any{
+						"name": "updated",
+						"sort": 99,
+					},
+				)
 			if err != nil {
 				t.Error("error updating properties", err)
 			}
-			model, err := driver.Model[testVertexForUtils](db).Where("name", comparator.EQ, "updated").Take()
+			model, err := driver.Model[testVertexForUtils](
+				db,
+			).Where("name", comparator.EQ, "updated").
+				Take()
 			if err != nil {
 				t.Error(err)
 			}
@@ -597,16 +627,22 @@ func TestQuery(t *testing.T) {
 			if err != nil {
 				t.Error(err)
 			}
-			err = driver.Model[testVertexForUtils](db).Where("name", comparator.EQ, "second").Updates(
-				map[string]any{
-					"sort":     42,
-					"listTest": []string{"replaced"},
-				},
-			)
+			err = driver.Model[testVertexForUtils](
+				db,
+			).Where("name", comparator.EQ, "second").
+				Updates(
+					map[string]any{
+						"sort":     42,
+						"listTest": []string{"replaced"},
+					},
+				)
 			if err != nil {
 				t.Error("error updating properties", err)
 			}
-			model, err := driver.Model[testVertexForUtils](db).Where("name", comparator.EQ, "second").Take()
+			model, err := driver.Model[testVertexForUtils](
+				db,
+			).Where("name", comparator.EQ, "second").
+				Take()
 			if err != nil {
 				t.Error(err)
 			}
@@ -635,7 +671,10 @@ func TestQuery(t *testing.T) {
 				t.Error("Expected error for unknown property")
 			}
 			// The bad key must abort the whole update, including valid keys.
-			count, err := driver.Model[testVertexForUtils](db).Where("name", comparator.EQ, "valid").Count()
+			count, err := driver.Model[testVertexForUtils](
+				db,
+			).Where("name", comparator.EQ, "valid").
+				Count()
 			if err != nil {
 				t.Error(err)
 			}
@@ -677,7 +716,10 @@ func TestQuery(t *testing.T) {
 			if err != nil {
 				t.Error(err)
 			}
-			preModel, err := driver.Model[testVertexForUtils](db).Where("name", comparator.EQ, "first").Take()
+			preModel, err := driver.Model[testVertexForUtils](
+				db,
+			).Where("name", comparator.EQ, "first").
+				Take()
 			if err != nil {
 				t.Error(err)
 			}
@@ -686,7 +728,10 @@ func TestQuery(t *testing.T) {
 			if err != nil {
 				t.Error("error removing property", err)
 			}
-			model, err := driver.Model[testVertexForUtils](db).Where("name", comparator.EQ, "first").Take()
+			model, err := driver.Model[testVertexForUtils](
+				db,
+			).Where("name", comparator.EQ, "first").
+				Take()
 			if err != nil {
 				t.Error(err)
 			}
@@ -713,7 +758,10 @@ func TestQuery(t *testing.T) {
 			if err != nil {
 				t.Error("error removing properties", err)
 			}
-			model, err := driver.Model[testVertexForUtils](db).Where("name", comparator.EQ, "second").Take()
+			model, err := driver.Model[testVertexForUtils](
+				db,
+			).Where("name", comparator.EQ, "second").
+				Take()
 			if err != nil {
 				t.Error(err)
 			}
@@ -743,7 +791,10 @@ func TestQuery(t *testing.T) {
 			if err != nil {
 				t.Error("error removing duplicate property names", err)
 			}
-			model, err := driver.Model[testVertexForUtils](db).Where("name", comparator.EQ, "third").Take()
+			model, err := driver.Model[testVertexForUtils](
+				db,
+			).Where("name", comparator.EQ, "third").
+				Take()
 			if err != nil {
 				t.Error(err)
 			}
@@ -778,7 +829,10 @@ func TestQuery(t *testing.T) {
 				t.Error("Expected error for unknown property")
 			}
 			// The bad key must abort the whole removal, including valid keys.
-			model, err := driver.Model[testVertexForUtils](db).Where("name", comparator.EQ, "first").Take()
+			model, err := driver.Model[testVertexForUtils](
+				db,
+			).Where("name", comparator.EQ, "first").
+				Take()
 			if err != nil {
 				t.Error(err)
 			}
@@ -1103,16 +1157,25 @@ func TestQuery(t *testing.T) {
 			if err != nil {
 				t.Error(err)
 			}
-			model, err := driver.Model[testVertexForUtils](db).Where("name", comparator.EQ, "second").Take()
+			model, err := driver.Model[testVertexForUtils](
+				db,
+			).Where("name", comparator.EQ, "second").
+				Take()
 			if err != nil {
 				t.Error(err)
 			}
-			model.ListTest = []string{"Going to test the update with existing slice property", "another test"}
+			model.ListTest = []string{
+				"Going to test the update with existing slice property",
+				"another test",
+			}
 			err = driver.Save(db, &model)
 			if err != nil {
 				t.Error("error updating property", err)
 			}
-			updatedModel, err := driver.Model[testVertexForUtils](db).Where("name", comparator.EQ, "second").Take()
+			updatedModel, err := driver.Model[testVertexForUtils](
+				db,
+			).Where("name", comparator.EQ, "second").
+				Take()
 			if err != nil {
 				t.Error(err)
 			}
@@ -1122,8 +1185,11 @@ func TestQuery(t *testing.T) {
 				updatedModel.ListTest, "another test",
 			) {
 				t.Errorf(
-					"Expected %s and %s, got %s and %s", "Going to test the update with existing slice property",
-					"another test", updatedModel.ListTest[0], updatedModel.ListTest[1],
+					"Expected %s and %s, got %s and %s",
+					"Going to test the update with existing slice property",
+					"another test",
+					updatedModel.ListTest[0],
+					updatedModel.ListTest[1],
 				)
 			}
 		},
@@ -1183,7 +1249,11 @@ func TestQuery(t *testing.T) {
 			}
 			for _, result := range results {
 				if result.Name == "" || result.Sort == 0 {
-					t.Errorf("Expected name and sort to be set, got %s and %d", result.Name, result.Sort)
+					t.Errorf(
+						"Expected name and sort to be set, got %s and %d",
+						result.Name,
+						result.Sort,
+					)
 				}
 			}
 		},

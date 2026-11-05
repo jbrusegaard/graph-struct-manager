@@ -17,16 +17,16 @@ type testTopic struct {
 
 type testPerson struct {
 	gsmtypes.Vertex
-	Name       string       `json:"name"   gremlin:"name"`
-	Topics     []testTopic  `json:"topics"                gremlinEdge:"subscribed"`
-	BestFriend *testPerson  `json:"bestFriend"            gremlinEdge:"best_friend,out"`
-	Friends    []testPerson `json:"friends"               gremlinEdge:"friend,both"`
+	Name       string       `json:"name"       gremlin:"name"`
+	Topics     []testTopic  `json:"topics"                    gremlinEdge:"subscribed"`
+	BestFriend *testPerson  `json:"bestFriend"                gremlinEdge:"best_friend,out"`
+	Friends    []testPerson `json:"friends"                   gremlinEdge:"friend,both"`
 }
 
 type testTopicWithSubscribers struct {
 	gsmtypes.Vertex
-	Title       string       `json:"title" gremlin:"title"`
-	Subscribers []testPerson `json:"subscribers" gremlinEdge:"subscribed,in"`
+	Title       string       `json:"title"       gremlin:"title"`
+	Subscribers []testPerson `json:"subscribers"                 gremlinEdge:"subscribed,in"`
 }
 
 func (t *testTopicWithSubscribers) Label() string {
@@ -591,7 +591,12 @@ func TestParseGremlinEdgeTag(t *testing.T) {
 		wantDirection int
 		wantErr       bool
 	}{
-		{name: "label only defaults to out", tag: "subscribed", wantLabel: "subscribed", wantDirection: 0},
+		{
+			name:          "label only defaults to out",
+			tag:           "subscribed",
+			wantLabel:     "subscribed",
+			wantDirection: 0,
+		},
 		{name: "explicit out", tag: "subscribed,out", wantLabel: "subscribed", wantDirection: 0},
 		{name: "in direction", tag: "subscribed,in", wantLabel: "subscribed", wantDirection: 1},
 		{name: "both direction", tag: "friend,both", wantLabel: "friend", wantDirection: 2},
