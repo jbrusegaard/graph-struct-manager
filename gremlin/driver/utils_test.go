@@ -34,7 +34,8 @@ func (t *testVertexWithoutAnonymousVertex) Label() string {
 }
 
 func (t *testVertexWithoutAnonymousVertex) SetVertexID(id any) {
-	t.ID = id.(string)
+	s, _ := id.(string)
+	t.ID = s
 }
 
 func (t *testVertexWithoutAnonymousVertex) SetVertexLastModified(lastModified time.Time) {
@@ -43,6 +44,39 @@ func (t *testVertexWithoutAnonymousVertex) SetVertexLastModified(lastModified ti
 
 func (t *testVertexWithoutAnonymousVertex) SetVertexCreatedAt(createdAt time.Time) {
 	t.CreatedAt = createdAt
+}
+
+// TestVertexWithoutAnonymousVertex exercises the fixture built in #23 whose
+// table case never landed: a value that satisfies gsmtypes.VertexType through
+// hand-written methods but lacks the embedded gsmtypes.Vertex field. The
+// reflection guard must reject it even though the interface assertion passes.
+func TestVertexWithoutAnonymousVertex(t *testing.T) {
+	t.Parallel()
+	v := &testVertexWithoutAnonymousVertex{Name: "iface"}
+	now := time.Now().UTC()
+	v.SetVertexID("abc")
+	v.SetVertexLastModified(now)
+	v.SetVertexCreatedAt(now)
+	if v.GetVertexID() != "abc" {
+		t.Errorf("GetVertexID() = %v, want abc", v.GetVertexID())
+	}
+	if !v.GetVertexLastModified().Equal(now) {
+		t.Errorf("GetVertexLastModified() = %v, want %v", v.GetVertexLastModified(), now)
+	}
+	if !v.GetVertexCreatedAt().Equal(now) {
+		t.Errorf("GetVertexCreatedAt() = %v, want %v", v.GetVertexCreatedAt(), now)
+	}
+	if v.Label() != "" {
+		t.Errorf("Label() = %q, want empty", v.Label())
+	}
+	err := driver.ValidateStructPointerWithAnonymousVertexForTest(v)
+	if err == nil || err.Error() != "struct must contain anonymous types.Vertex field" {
+		t.Errorf(
+			"ValidateStructPointerWithAnonymousVertexForTest() = %v, "+
+				"want anonymous types.Vertex error",
+			err,
+		)
+	}
 }
 
 type testVertexForUtils struct {

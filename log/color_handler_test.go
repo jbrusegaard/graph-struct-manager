@@ -10,9 +10,6 @@ import (
 	gsmlog "github.com/jbrusegaard/graph-struct-manager/log"
 )
 
-//go:fix inline
-func boolPtr(b bool) *bool { return new(b) }
-
 func TestColorHandlerLevels(t *testing.T) {
 	t.Parallel()
 

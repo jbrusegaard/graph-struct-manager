@@ -2,6 +2,7 @@ package driver_test
 
 import (
 	"errors"
+	"fmt"
 	"slices"
 	"testing"
 
@@ -25,12 +26,19 @@ func seedData(db *driver.GremlinDriver, data []testVertexForUtils) error {
 }
 
 func cleanDB() {
-	db, _ := driver.Open(
+	db, err := driver.Open(
 		DbURL, driver.Config{
 			Driver: dbDriver,
 		},
 	)
-	<-db.G().V().Drop().Iterate()
+	if err != nil {
+		panic(fmt.Errorf("cleanDB: open driver: %w", err))
+	}
+	// A failed cleanup leaks state into the next test and points the failure
+	// at the wrong test; panic inside t.Cleanup surfaces it as a failure.
+	if dropErr := <-db.G().V().Drop().Iterate(); dropErr != nil {
+		panic(fmt.Errorf("cleanDB: drop vertices: %w", dropErr))
+	}
 }
 
 // testVertexWithPointerFieldsForUpdate models pointer-declared fields for

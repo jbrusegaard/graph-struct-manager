@@ -177,6 +177,9 @@ linters:
           - dupl
           - funlen
           - goconst
+          - gocognit
+          - gocyclo
+          - cyclop
           - gosec
           - noctx
           - wrapcheck

@@ -560,13 +560,13 @@ func TestEdgeQueryFromTo(t *testing.T) {
 	bob := edgeTestPerson{Name: "bob"}
 	topicOne := edgeTestTopic{Title: "one"}
 	topicTwo := edgeTestTopic{Title: "two"}
-	for _, v := range []any{&alice, &bob} {
-		if err := driver.Create(db, v.(*edgeTestPerson)); err != nil {
+	for _, v := range []*edgeTestPerson{&alice, &bob} {
+		if err := driver.Create(db, v); err != nil {
 			t.Fatal(err)
 		}
 	}
-	for _, v := range []any{&topicOne, &topicTwo} {
-		if err := driver.Create(db, v.(*edgeTestTopic)); err != nil {
+	for _, v := range []*edgeTestTopic{&topicOne, &topicTwo} {
+		if err := driver.Create(db, v); err != nil {
 			t.Fatal(err)
 		}
 	}
