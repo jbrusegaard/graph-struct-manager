@@ -25,7 +25,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   also converts `string` to `[]rune` (which is `[]int32`), so a string property loading
   into an `[]int32` field became character codes (`"80"` became `{56, 48}`); a `string`
   now converts only to `string` or `[]byte`. Numeric-to-numeric and `[]byte`-to-`string`
-  conversions are unaffected.
+  conversions are unaffected, and `byte` (`uint8`) sources keep their character semantics:
+  `byte('A')` loads into a `string` field as `"A"`, not `"65"`, so a `[]byte` arriving at
+  a `[]string` field still loads as characters.
 - A property holding several values no longer loads a single-valued field as its zero
   value. Every Neptune vertex property is set-cardinality, so a field that models one
   value still receives a list once the property holds more than one; the first value is

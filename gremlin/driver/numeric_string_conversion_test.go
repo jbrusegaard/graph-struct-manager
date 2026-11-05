@@ -211,6 +211,38 @@ func TestIntegerStringConversions(t *testing.T) {
 			},
 		},
 		{
+			name: "ByteLoadsAsCharacterNotDecimal",
+			data: map[any]any{"tag": byte('A')},
+			check: func(t *testing.T, v *conversionVertex) {
+				if v.Tag != "A" {
+					t.Errorf("Tag = %q, want %q (character, not decimal %q)", v.Tag, "A", "65")
+				}
+			},
+		},
+		{
+			name: "ByteSliceLoadsElementWiseAsCharacters",
+			data: map[any]any{"weights": []byte("hi")},
+			check: func(t *testing.T, v *conversionVertex) {
+				if want := []string{"h", "i"}; !reflect.DeepEqual(v.Weights, want) {
+					t.Errorf("Weights = %#v, want %#v (characters, not byte values)",
+						v.Weights, want)
+				}
+			},
+		},
+		{
+			name: "ByteSliceLoadsIntoPointerStringSliceAsCharacters",
+			data: map[any]any{"ptrWeights": []byte("hi")},
+			check: func(t *testing.T, v *conversionVertex) {
+				if len(v.PtrWeights) != 2 || v.PtrWeights[0] == nil || v.PtrWeights[1] == nil {
+					t.Fatalf(`PtrWeights = %#v, want two non-nil pointers`, v.PtrWeights)
+				}
+				if *v.PtrWeights[0] != "h" || *v.PtrWeights[1] != "i" {
+					t.Errorf(`PtrWeights = [%q %q], want ["h" "i"]`,
+						*v.PtrWeights[0], *v.PtrWeights[1])
+				}
+			},
+		},
+		{
 			name: "NumericAndStringPathsStillWork",
 			data: map[any]any{
 				"quantity": int32(7),

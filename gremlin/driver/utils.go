@@ -409,6 +409,10 @@ func safeConvertible(from, t reflect.Type) bool {
 // save round trip lossless: a skipped field would save its zero value back
 // over the stored number. fmt.Sprint's %v is the shortest representation
 // that reads back as the same value (8.0 renders "8", 3.5 renders "3.5").
+// byte (uint8) is the exception: Go's byte-to-string conversion yields the
+// character (byte('A') is "A"), which is the intended semantics and keeps a
+// []byte element-wise into a []string field loading as characters, so it
+// stays on the plain Convert path.
 func convertValue(src reflect.Value, t reflect.Type) (reflect.Value, bool) {
 	if !src.IsValid() {
 		return reflect.Value{}, false
@@ -418,7 +422,8 @@ func convertValue(src reflect.Value, t reflect.Type) (reflect.Value, bool) {
 		// field untouched instead. Covers slice elements as well as fields.
 		return reflect.Value{}, false
 	}
-	if t.Kind() == reflect.String && (src.CanInt() || src.CanUint() || src.CanFloat()) {
+	if t.Kind() == reflect.String && src.Kind() != reflect.Uint8 &&
+		(src.CanInt() || src.CanUint() || src.CanFloat()) {
 		text := fmt.Sprint(src.Interface())
 		return reflect.ValueOf(text).Convert(t), true
 	}
