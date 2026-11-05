@@ -4,7 +4,7 @@ COVERAGE_THRESHOLD := 80
 PATCH_THRESHOLD := 80
 MUTATION_THRESHOLD := 60
 
-.PHONY: lint first-setup go-lint test-cov test test-verbose coverage coverage-check patch-coverage vet security mutation deadcode build-check bench profile verify clean
+.PHONY: lint first-setup graph-link go-lint test-cov test test-verbose coverage coverage-check patch-coverage vet security mutation deadcode build-check bench profile verify clean
 
 ## Lint via pre-commit hooks (golangci-lint, formatting)
 lint:
@@ -17,6 +17,14 @@ first-setup:
 	brew install pre-commit
 	brew install go
 	pre-commit install
+	@command -v uv >/dev/null && uv tool install graphifyy || echo "graphify skipped: install uv first (https://docs.astral.sh/uv/)"
+
+## Link the canonical graphify graph from the main checkout into this worktree
+## (avoids a per-worktree regen; updates from any worktree refresh the shared graph)
+graph-link:
+	@MAIN=$$(git worktree list --porcelain | awk '/^worktree /{print substr($$0,10); exit}'); \
+	ln -sfn "$$MAIN/graphify-out" graphify-out; \
+	echo "Linked graphify-out -> $$MAIN/graphify-out"
 
 ## Autofix lint + format issues
 go-lint:

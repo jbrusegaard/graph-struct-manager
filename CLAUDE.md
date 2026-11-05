@@ -8,6 +8,10 @@ Rules:
 - Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
 - After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
 
+Setup (fresh clone): install the CLI with `uv tool install graphifyy`, then bootstrap with `graphify update .`. The graph is deliberately not committed — derived output, ~5.6MB, and a merge-conflict magnet across branches.
+
+Worktrees: do not regenerate per worktree. Link the canonical graph from the main checkout instead — `make graph-link` (or: `MAIN=$(git worktree list --porcelain | awk '/^worktree /{print substr($0,10); exit}') && ln -sfn "$MAIN/graphify-out" graphify-out`). `graphify update` run from any worktree refreshes the shared copy, so it stays current everywhere.
+
 ## Go AI-Verified Development
 
 ### Project Architecture
