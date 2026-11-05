@@ -89,7 +89,7 @@ func createEdge[E any](db *GremlinDriver, value *E, from any, to any) error {
 		if isGremlinNotFoundErr(err) {
 			return fmt.Errorf("create edge: from vertex %v not found", fromID)
 		}
-		return err
+		return fmt.Errorf("create edge %s: %w", label, err)
 	}
 	edge.SetEdgeID(edgeID.GetInterface())
 	return runAfterCreateHook(db, value)
@@ -122,7 +122,7 @@ func updateEdge[E any](db *GremlinDriver, value *E) error {
 	query = applyEdgeProperties(query, mapValue)
 	db.logTraversal(query)
 	if _, err = query.Next(); err != nil {
-		return err
+		return fmt.Errorf("update edge %v: %w", id, err)
 	}
 	return runAfterUpdateHook(db, value)
 }

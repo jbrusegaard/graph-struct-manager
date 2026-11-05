@@ -102,7 +102,10 @@ func (h *ColorHandler) Handle(_ context.Context, r slog.Record) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	_, err := h.out.Write(buf)
-	return err
+	if err != nil {
+		return fmt.Errorf("color handler: write to output: %w", err)
+	}
+	return nil
 }
 
 func (h *ColorHandler) WithAttrs(attrs []slog.Attr) slog.Handler {

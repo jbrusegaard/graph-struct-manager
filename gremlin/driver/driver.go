@@ -77,7 +77,7 @@ func Open(url string, config ...Config) (*GremlinDriver, error) {
 	if configStruct.GremlinConnectionSettings == nil {
 		remote, err = gremlingo.NewDriverRemoteConnection(fmt.Sprintf("%s/gremlin", url))
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("connect to gremlin endpoint %s: %w", url, err)
 		}
 	} else {
 		remote, err = gremlingo.NewDriverRemoteConnection(
@@ -85,7 +85,7 @@ func Open(url string, config ...Config) (*GremlinDriver, error) {
 			configStruct.GremlinConnectionSettings,
 		)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("connect to gremlin endpoint %s: %w", url, err)
 		}
 	}
 
