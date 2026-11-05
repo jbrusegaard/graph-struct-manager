@@ -43,13 +43,13 @@ type testVertexWithPointerFieldsForUpdate struct {
 }
 
 func TestQuery(t *testing.T) {
-	db, err := driver.Open(
+	db, openErr := driver.Open(
 		DbURL, driver.Config{
 			Driver: dbDriver,
 		},
 	)
-	if err != nil {
-		t.Fatal(err)
+	if openErr != nil {
+		t.Fatal(openErr)
 	}
 	seededData := []testVertexForUtils{
 		{
@@ -71,7 +71,7 @@ func TestQuery(t *testing.T) {
 	t.Run(
 		"TestFindWhereFirst", func(t *testing.T) {
 			t.Cleanup(cleanDB)
-			err = seedData(db, seededData)
+			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
 			}
@@ -99,7 +99,7 @@ func TestQuery(t *testing.T) {
 		t.Run(
 			orderTest.Name, func(t *testing.T) {
 				t.Cleanup(cleanDB)
-				err = seedData(db, seededData)
+				err := seedData(db, seededData)
 				if err != nil {
 					t.Error(err)
 				}
@@ -129,7 +129,7 @@ func TestQuery(t *testing.T) {
 	t.Run(
 		"TestQueryWhereTraversal", func(t *testing.T) {
 			t.Cleanup(cleanDB)
-			err = seedData(db, seededData)
+			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
 			}
@@ -148,7 +148,7 @@ func TestQuery(t *testing.T) {
 	t.Run(
 		"TestQueryPreQuery", func(t *testing.T) {
 			t.Cleanup(cleanDB)
-			err = seedData(db, seededData)
+			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
 			}
@@ -170,11 +170,11 @@ func TestQuery(t *testing.T) {
 	t.Run(
 		"TestDelete", func(t *testing.T) {
 			t.Cleanup(cleanDB)
-			err = seedData(db, seededData)
+			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
 			}
-			err := driver.Model[testVertexForUtils](db).Limit(1).Delete()
+			err = driver.Model[testVertexForUtils](db).Limit(1).Delete()
 			if err != nil {
 				t.Error(err)
 			}
@@ -191,7 +191,7 @@ func TestQuery(t *testing.T) {
 	t.Run(
 		"TestQueryById", func(t *testing.T) {
 			t.Cleanup(cleanDB)
-			err = seedData(db, seededData)
+			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
 			}
@@ -218,7 +218,7 @@ func TestQuery(t *testing.T) {
 	t.Run(
 		"TestIDWithInvalidLabel", func(t *testing.T) {
 			t.Cleanup(cleanDB)
-			err = seedData(db, seededData)
+			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
 			}
@@ -235,7 +235,7 @@ func TestQuery(t *testing.T) {
 	t.Run(
 		"TestIDRespectsLabels", func(t *testing.T) {
 			t.Cleanup(cleanDB)
-			err = seedData(db, seededData)
+			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
 			}
@@ -260,7 +260,7 @@ func TestQuery(t *testing.T) {
 	t.Run(
 		"TestQueryUpdateBadInput", func(t *testing.T) {
 			t.Cleanup(cleanDB)
-			err = seedData(db, seededData)
+			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
 			}
@@ -273,7 +273,7 @@ func TestQuery(t *testing.T) {
 	t.Run(
 		"Test Update query with existing slice property", func(t *testing.T) {
 			t.Cleanup(cleanDB)
-			err = seedData(db, seededData)
+			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
 			}
@@ -316,7 +316,7 @@ func TestQuery(t *testing.T) {
 				Name: "pointer-slice",
 				Tags: &[]string{"old1", "old2"},
 			}
-			err = driver.Create(db, &v)
+			err := driver.Create(db, &v)
 			if err != nil {
 				t.Error(err)
 			}
@@ -354,7 +354,7 @@ func TestQuery(t *testing.T) {
 				Name: "pointer-slice-nil",
 				Tags: &[]string{"stale"},
 			}
-			err = driver.Create(db, &v)
+			err := driver.Create(db, &v)
 			if err != nil {
 				t.Error(err)
 			}
@@ -383,7 +383,7 @@ func TestQuery(t *testing.T) {
 		"TestQueryUpdatePointerToScalarWritesValue", func(t *testing.T) {
 			t.Cleanup(cleanDB)
 			v := testVertexWithPointerFieldsForUpdate{Name: "pointer-scalar"}
-			err = driver.Create(db, &v)
+			err := driver.Create(db, &v)
 			if err != nil {
 				t.Error(err)
 			}
@@ -409,7 +409,7 @@ func TestQuery(t *testing.T) {
 				Name: "pointer-plain",
 				Tags: &[]string{"old"},
 			}
-			err = driver.Create(db, &v)
+			err := driver.Create(db, &v)
 			if err != nil {
 				t.Error(err)
 			}
@@ -448,7 +448,7 @@ func TestQuery(t *testing.T) {
 			t.Cleanup(cleanDB)
 			status := "active"
 			v := testVertexWithPointerFieldsForUpdate{Name: "pointer-scalar-nil", Status: &status}
-			err = driver.Create(db, &v)
+			err := driver.Create(db, &v)
 			if err != nil {
 				t.Error(err)
 			}
@@ -469,7 +469,7 @@ func TestQuery(t *testing.T) {
 	t.Run(
 		"TestQueryUpdateSingleCardinality", func(t *testing.T) {
 			t.Cleanup(cleanDB)
-			err = seedData(db, seededData)
+			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
 			}
@@ -508,7 +508,7 @@ func TestQuery(t *testing.T) {
 	t.Run(
 		"TestSave", func(t *testing.T) {
 			t.Cleanup(cleanDB)
-			err = seedData(db, seededData)
+			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
 			}
@@ -540,7 +540,7 @@ func TestQuery(t *testing.T) {
 	t.Run(
 		"TestUpdate", func(t *testing.T) {
 			t.Cleanup(cleanDB)
-			err = seedData(db, seededData)
+			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
 			}
@@ -572,7 +572,7 @@ func TestQuery(t *testing.T) {
 	t.Run(
 		"TestUpdatesTargeted", func(t *testing.T) {
 			t.Cleanup(cleanDB)
-			err = seedData(db, seededData)
+			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
 			}
@@ -623,7 +623,7 @@ func TestQuery(t *testing.T) {
 	t.Run(
 		"TestUpdatesWithSliceProperty", func(t *testing.T) {
 			t.Cleanup(cleanDB)
-			err = seedData(db, seededData)
+			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
 			}
@@ -657,7 +657,7 @@ func TestQuery(t *testing.T) {
 	t.Run(
 		"TestUpdatesBadInput", func(t *testing.T) {
 			t.Cleanup(cleanDB)
-			err = seedData(db, seededData)
+			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
 			}
@@ -686,7 +686,7 @@ func TestQuery(t *testing.T) {
 	t.Run(
 		"TestUpdatesRejectsID", func(t *testing.T) {
 			t.Cleanup(cleanDB)
-			err = seedData(db, seededData)
+			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
 			}
@@ -699,7 +699,7 @@ func TestQuery(t *testing.T) {
 	t.Run(
 		"TestUpdatesEmptyMap", func(t *testing.T) {
 			t.Cleanup(cleanDB)
-			err = seedData(db, seededData)
+			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
 			}
@@ -712,7 +712,7 @@ func TestQuery(t *testing.T) {
 	t.Run(
 		"TestRemovePropertySingle", func(t *testing.T) {
 			t.Cleanup(cleanDB)
-			err = seedData(db, seededData)
+			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
 			}
@@ -738,7 +738,7 @@ func TestQuery(t *testing.T) {
 			if model.Sort != 0 {
 				t.Errorf("Expected sort to be zero value after removal, got %d", model.Sort)
 			}
-			if _, err := db.G().V(model.ID).Values("sort").Next(); err == nil {
+			if _, probeErr := db.G().V(model.ID).Values("sort").Next(); probeErr == nil {
 				t.Error("Expected sort property to be dropped entirely, not just zeroed")
 			}
 			if preModel.LastModified.Equal(model.LastModified) {
@@ -749,7 +749,7 @@ func TestQuery(t *testing.T) {
 	t.Run(
 		"TestRemovePropertiesMultiple", func(t *testing.T) {
 			t.Cleanup(cleanDB)
-			err = seedData(db, seededData)
+			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
 			}
@@ -771,10 +771,10 @@ func TestQuery(t *testing.T) {
 			if model.ListTest != nil {
 				t.Errorf("Expected listTest to be nil after removal, got %v", model.ListTest)
 			}
-			if _, err := db.G().V(model.ID).Values("sort").Next(); err == nil {
+			if _, probeErr := db.G().V(model.ID).Values("sort").Next(); probeErr == nil {
 				t.Error("Expected sort property to be dropped entirely")
 			}
-			if _, err := db.G().V(model.ID).Values("listTest").Next(); err == nil {
+			if _, probeErr := db.G().V(model.ID).Values("listTest").Next(); probeErr == nil {
 				t.Error("Expected listTest property to be dropped entirely")
 			}
 		},
@@ -782,7 +782,7 @@ func TestQuery(t *testing.T) {
 	t.Run(
 		"TestRemovePropertiesDuplicateNames", func(t *testing.T) {
 			t.Cleanup(cleanDB)
-			err = seedData(db, seededData)
+			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
 			}
@@ -806,7 +806,7 @@ func TestQuery(t *testing.T) {
 	t.Run(
 		"TestRemovePropertyBadInput", func(t *testing.T) {
 			t.Cleanup(cleanDB)
-			err = seedData(db, seededData)
+			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
 			}
@@ -819,7 +819,7 @@ func TestQuery(t *testing.T) {
 	t.Run(
 		"TestRemovePropertiesBadInputAborts", func(t *testing.T) {
 			t.Cleanup(cleanDB)
-			err = seedData(db, seededData)
+			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
 			}
@@ -844,7 +844,7 @@ func TestQuery(t *testing.T) {
 	t.Run(
 		"TestRemovePropertiesRejectsID", func(t *testing.T) {
 			t.Cleanup(cleanDB)
-			err = seedData(db, seededData)
+			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
 			}
@@ -857,7 +857,7 @@ func TestQuery(t *testing.T) {
 	t.Run(
 		"TestRemovePropertiesEmpty", func(t *testing.T) {
 			t.Cleanup(cleanDB)
-			err = seedData(db, seededData)
+			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
 			}
@@ -870,7 +870,7 @@ func TestQuery(t *testing.T) {
 	t.Run(
 		"TestQueryIDs", func(t *testing.T) {
 			t.Cleanup(cleanDB)
-			err = seedData(db, seededData)
+			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
 			}
@@ -879,9 +879,9 @@ func TestQuery(t *testing.T) {
 				t.Error(err)
 			}
 			for _, model := range models {
-				mdl, err := driver.Model[testVertexForUtils](db).IDs(model.ID).Take()
-				if err != nil {
-					t.Error(err)
+				mdl, takeErr := driver.Model[testVertexForUtils](db).IDs(model.ID).Take()
+				if takeErr != nil {
+					t.Error(takeErr)
 				}
 				if mdl.Name != model.Name {
 					t.Errorf("Expected %s result, got %s", model.Name, mdl.Name)
@@ -892,7 +892,7 @@ func TestQuery(t *testing.T) {
 	t.Run(
 		"TestQueryAddSubTraversals", func(t *testing.T) {
 			t.Cleanup(cleanDB)
-			err = seedData(db, seededData)
+			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
 			}
@@ -951,7 +951,7 @@ func TestQuery(t *testing.T) {
 	t.Run(
 		"Test Range Query", func(t *testing.T) {
 			t.Cleanup(cleanDB)
-			err = seedData(db, seededData)
+			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
 			}
@@ -979,7 +979,7 @@ func TestQuery(t *testing.T) {
 	t.Run(
 		"Test Range Query with 2 as lower bound", func(t *testing.T) {
 			t.Cleanup(cleanDB)
-			err = seedData(db, seededData)
+			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
 			}
@@ -996,7 +996,7 @@ func TestQuery(t *testing.T) {
 	t.Run(
 		"Test Range with offset already set", func(t *testing.T) {
 			t.Cleanup(cleanDB)
-			err = seedData(db, seededData)
+			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
 			}
@@ -1012,7 +1012,7 @@ func TestQuery(t *testing.T) {
 	t.Run(
 		"TestQueryWhereIn", func(t *testing.T) {
 			t.Cleanup(cleanDB)
-			err = seedData(db, seededData)
+			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
 			}
@@ -1038,7 +1038,7 @@ func TestQuery(t *testing.T) {
 	t.Run(
 		"TestQueryWhereWithout", func(t *testing.T) {
 			t.Cleanup(cleanDB)
-			err = seedData(db, seededData)
+			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
 			}
@@ -1061,7 +1061,7 @@ func TestQuery(t *testing.T) {
 	t.Run(
 		"TestQueryWhereContains", func(t *testing.T) {
 			t.Cleanup(cleanDB)
-			err = seedData(db, seededData)
+			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
 			}
@@ -1079,7 +1079,7 @@ func TestQuery(t *testing.T) {
 	t.Run(
 		"TestQueryWhereID", func(t *testing.T) {
 			t.Cleanup(cleanDB)
-			err = seedData(db, seededData)
+			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
 			}
@@ -1101,7 +1101,7 @@ func TestQuery(t *testing.T) {
 	t.Run(
 		"TestQueryLimitOffset", func(t *testing.T) {
 			t.Cleanup(cleanDB)
-			err = seedData(db, seededData)
+			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
 			}
@@ -1124,7 +1124,7 @@ func TestQuery(t *testing.T) {
 	t.Run(
 		"TestQueryIDsMultiple", func(t *testing.T) {
 			t.Cleanup(cleanDB)
-			err = seedData(db, seededData)
+			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
 			}
@@ -1153,7 +1153,7 @@ func TestQuery(t *testing.T) {
 	t.Run(
 		"Test save with existing slice property", func(t *testing.T) {
 			t.Cleanup(cleanDB)
-			err = seedData(db, seededData)
+			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
 			}
@@ -1206,7 +1206,7 @@ func TestQuery(t *testing.T) {
 	t.Run(
 		"Test Select", func(t *testing.T) {
 			t.Cleanup(cleanDB)
-			err = seedData(db, seededData)
+			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
 			}
@@ -1236,7 +1236,7 @@ func TestQuery(t *testing.T) {
 	t.Run(
 		"Test Select with multiple fields", func(t *testing.T) {
 			t.Cleanup(cleanDB)
-			err = seedData(db, seededData)
+			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
 			}
@@ -1261,7 +1261,7 @@ func TestQuery(t *testing.T) {
 	t.Run(
 		"Test select with random field names", func(t *testing.T) {
 			t.Cleanup(cleanDB)
-			err = seedData(db, seededData)
+			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
 			}
@@ -1291,13 +1291,13 @@ func TestQuery(t *testing.T) {
 	t.Run(
 		"TestQueryScopes", func(t *testing.T) {
 			t.Cleanup(cleanDB)
-			err = seedData(db, seededData)
+			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
 			}
-			sortGreaterThan := func(min int) driver.QueryScope[testVertexForUtils] {
+			sortGreaterThan := func(minSort int) driver.QueryScope[testVertexForUtils] {
 				return func(q *driver.Query[testVertexForUtils]) *driver.Query[testVertexForUtils] {
-					return q.Where("sort", comparator.GT, min)
+					return q.Where("sort", comparator.GT, minSort)
 				}
 			}
 			orderBySortAsc := func(q *driver.Query[testVertexForUtils]) *driver.Query[testVertexForUtils] {
@@ -1323,7 +1323,7 @@ func TestQuery(t *testing.T) {
 	t.Run(
 		"TestQueryScopesNilAndComposed", func(t *testing.T) {
 			t.Cleanup(cleanDB)
-			err = seedData(db, seededData)
+			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
 			}
@@ -1350,7 +1350,7 @@ func TestQuery(t *testing.T) {
 	t.Run(
 		"Test Invalid Labels", func(t *testing.T) {
 			t.Cleanup(cleanDB)
-			err = seedData(db, seededData)
+			err := seedData(db, seededData)
 			if err != nil {
 				t.Error(err)
 			}
@@ -1367,13 +1367,13 @@ func TestQuery(t *testing.T) {
 
 func TestSaveReplacesSliceProperties(t *testing.T) {
 	t.Cleanup(cleanDB)
-	db, err := driver.Open(
+	db, openErr := driver.Open(
 		DbURL, driver.Config{
 			Driver: dbDriver,
 		},
 	)
-	if err != nil {
-		t.Fatal(err)
+	if openErr != nil {
+		t.Fatal(openErr)
 	}
 	defer db.Close()
 
@@ -1402,13 +1402,13 @@ func TestSaveReplacesSliceProperties(t *testing.T) {
 
 func TestSaveKeepsUnrelatedProperties(t *testing.T) {
 	t.Cleanup(cleanDB)
-	db, err := driver.Open(
+	db, openErr := driver.Open(
 		DbURL, driver.Config{
 			Driver: dbDriver,
 		},
 	)
-	if err != nil {
-		t.Fatal(err)
+	if openErr != nil {
+		t.Fatal(openErr)
 	}
 	defer db.Close()
 

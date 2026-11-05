@@ -83,13 +83,13 @@ func seedPreloadData(t *testing.T, db *driver.GremlinDriver) (testPerson, []test
 }
 
 func TestPreload(t *testing.T) {
-	db, err := driver.Open(
+	db, openErr := driver.Open(
 		DbURL, driver.Config{
 			Driver: dbDriver,
 		},
 	)
-	if err != nil {
-		t.Fatal(err)
+	if openErr != nil {
+		t.Fatal(openErr)
 	}
 
 	t.Run(

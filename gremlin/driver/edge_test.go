@@ -220,9 +220,9 @@ func TestSaveEdge(t *testing.T) {
 	t.Run(
 		"NotAnEdgeStruct", func(t *testing.T) {
 			notAnEdge := edgeTestTopic{Title: "not an edge"}
-			err := driver.SaveEdge(db, &notAnEdge, &person, &topic)
-			if err == nil || !strings.Contains(err.Error(), "EdgeType") {
-				t.Errorf("expected EdgeType error, got %v", err)
+			saveErr := driver.SaveEdge(db, &notAnEdge, &person, &topic)
+			if saveErr == nil || !strings.Contains(saveErr.Error(), "EdgeType") {
+				t.Errorf("expected EdgeType error, got %v", saveErr)
 			}
 		},
 	)
@@ -390,8 +390,8 @@ func TestEdgeUpdatesAndRemoveProperty(t *testing.T) {
 
 	t.Run(
 		"UnknownProperty", func(t *testing.T) {
-			err := driver.Edge[subscribesTo](db).Update("unknown_property", 1)
-			if err == nil {
+			updateErr := driver.Edge[subscribesTo](db).Update("unknown_property", 1)
+			if updateErr == nil {
 				t.Error("expected error updating unknown property")
 			}
 		},

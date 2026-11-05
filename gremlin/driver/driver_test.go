@@ -56,13 +56,13 @@ func TestDriverConnections(t *testing.T) {
 }
 
 func TestDriverTable(t *testing.T) {
-	db, err := driver.Open(
+	db, openErr := driver.Open(
 		DbURL, driver.Config{
 			Driver: dbDriver,
 		},
 	)
-	if err != nil {
-		t.Fatal(err)
+	if openErr != nil {
+		t.Fatal(openErr)
 	}
 	defer db.Close()
 	table := db.Label("test_vertex")
@@ -75,13 +75,13 @@ func TestDriverTable(t *testing.T) {
 }
 
 func TestDriverModel(t *testing.T) {
-	db, err := driver.Open(
+	db, openErr := driver.Open(
 		DbURL, driver.Config{
 			Driver: dbDriver,
 		},
 	)
-	if err != nil {
-		t.Fatal(err)
+	if openErr != nil {
+		t.Fatal(openErr)
 	}
 	defer db.Close()
 	model := driver.Model[testVertex](db)
@@ -91,13 +91,13 @@ func TestDriverModel(t *testing.T) {
 }
 
 func TestDriverEdge(t *testing.T) {
-	db, err := driver.Open(
+	db, openErr := driver.Open(
 		DbURL, driver.Config{
 			Driver: dbDriver,
 		},
 	)
-	if err != nil {
-		t.Fatal(err)
+	if openErr != nil {
+		t.Fatal(openErr)
 	}
 	defer db.Close()
 

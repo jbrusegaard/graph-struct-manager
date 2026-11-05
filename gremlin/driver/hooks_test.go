@@ -90,13 +90,13 @@ func (v *hookFindErrorVertex) AfterFind(db *driver.GremlinDriver) error {
 }
 
 func TestCreateHooksCreate(t *testing.T) {
-	db, err := driver.Open(
+	db, openErr := driver.Open(
 		DbURL, driver.Config{
 			Driver: dbDriver,
 		},
 	)
-	if err != nil {
-		t.Fatal(err)
+	if openErr != nil {
+		t.Fatal(openErr)
 	}
 	defer db.Close()
 	t.Cleanup(cleanDB)
@@ -129,13 +129,13 @@ func TestCreateHooksCreate(t *testing.T) {
 }
 
 func TestUpdateHooksUpdate(t *testing.T) {
-	db, err := driver.Open(
+	db, openErr := driver.Open(
 		DbURL, driver.Config{
 			Driver: dbDriver,
 		},
 	)
-	if err != nil {
-		t.Fatal(err)
+	if openErr != nil {
+		t.Fatal(openErr)
 	}
 	defer db.Close()
 	t.Cleanup(cleanDB)
@@ -177,13 +177,13 @@ func TestUpdateHooksUpdate(t *testing.T) {
 }
 
 func TestAfterFindHooks(t *testing.T) {
-	db, err := driver.Open(
+	db, openErr := driver.Open(
 		DbURL, driver.Config{
 			Driver: dbDriver,
 		},
 	)
-	if err != nil {
-		t.Fatal(err)
+	if openErr != nil {
+		t.Fatal(openErr)
 	}
 	defer db.Close()
 	t.Cleanup(cleanDB)
@@ -235,13 +235,13 @@ func TestAfterFindHooks(t *testing.T) {
 }
 
 func TestAfterFindHookError(t *testing.T) {
-	db, err := driver.Open(
+	db, openErr := driver.Open(
 		DbURL, driver.Config{
 			Driver: dbDriver,
 		},
 	)
-	if err != nil {
-		t.Fatal(err)
+	if openErr != nil {
+		t.Fatal(openErr)
 	}
 	defer db.Close()
 	t.Cleanup(cleanDB)
@@ -251,7 +251,7 @@ func TestAfterFindHookError(t *testing.T) {
 		t.Fatalf("Create() error = %v", err)
 	}
 
-	_, err = driver.Model[hookFindErrorVertex](db).Take()
+	_, err := driver.Model[hookFindErrorVertex](db).Take()
 	if err == nil {
 		t.Fatal("expected AfterFind error to be returned")
 	}

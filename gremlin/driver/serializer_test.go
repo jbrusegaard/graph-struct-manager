@@ -101,8 +101,8 @@ func TestStructToMapSerialization(t *testing.T) {
 				)
 			}
 			var decoded testAttributes
-			if err := json.Unmarshal([]byte(encoded), &decoded); err != nil {
-				t.Fatalf("attributes should be valid JSON: %v", err)
+			if jsonErr := json.Unmarshal([]byte(encoded), &decoded); jsonErr != nil {
+				t.Fatalf("attributes should be valid JSON: %v", jsonErr)
 			}
 			if !reflect.DeepEqual(decoded, v.Attributes) {
 				t.Errorf("attributes round trip mismatch: got %v want %v", decoded, v.Attributes)
@@ -110,10 +110,10 @@ func TestStructToMapSerialization(t *testing.T) {
 			if mapValue["custom"] != "ptr:hello" {
 				t.Errorf("custom should be ptr:hello, got %v", mapValue["custom"])
 			}
-			if _, ok := mapValue["optional_attributes"]; ok {
+			if _, present := mapValue["optional_attributes"]; present {
 				t.Errorf("nil pointer field should be skipped")
 			}
-			if _, ok := mapValue["empty"]; ok {
+			if _, present := mapValue["empty"]; present {
 				t.Errorf("empty omitempty field should be skipped")
 			}
 		},
@@ -269,13 +269,13 @@ func TestUnloadDeserialization(t *testing.T) {
 }
 
 func TestSerializerIntegration(t *testing.T) {
-	db, err := driver.Open(
+	db, openErr := driver.Open(
 		DbURL, driver.Config{
 			Driver: dbDriver,
 		},
 	)
-	if err != nil {
-		t.Fatal(err)
+	if openErr != nil {
+		t.Fatal(openErr)
 	}
 	defer db.Close()
 

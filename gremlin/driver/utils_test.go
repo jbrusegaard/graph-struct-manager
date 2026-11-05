@@ -242,7 +242,7 @@ func TestUtils(t *testing.T) {
 			if !ok || len(tags) != 2 {
 				t.Errorf("Extras should contain slice field")
 			}
-			if _, ok := v.Extras["name"]; ok {
+			if _, present := v.Extras["name"]; present {
 				t.Errorf("Extras should not contain mapped fields")
 			}
 		},
