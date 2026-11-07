@@ -71,6 +71,25 @@ func updateVertex[T any](db *GremlinDriver, value *T) error {
 	return runAfterUpdateHook(db, value)
 }
 
+// resolveCreateID chooses the ID for a new vertex or edge and removes the
+// id key from the property map so it is never written as a regular property.
+// An ID set on the struct wins; otherwise the configured IDGenerator
+// supplies one. hasID is false when neither provides an ID, letting the
+// backend generate it.
+func resolveCreateID(db *GremlinDriver, mapValue map[string]any) (any, bool) {
+	id := mapValue["id"]
+	delete(mapValue, "id")
+	if id != nil {
+		return id, true
+	}
+	if db.idGenerator != nil {
+		if generated := db.idGenerator(); generated != nil {
+			return generated, true
+		}
+	}
+	return nil, false
+}
+
 func createVertex[T any](db *GremlinDriver, value *T) error {
 	vertex, ok := any(value).(gsmtypes.VertexType)
 	if !ok {
@@ -89,15 +108,7 @@ func createVertex[T any](db *GremlinDriver, value *T) error {
 	if err != nil {
 		return err
 	}
-	delete(mapValue, "id")
-	var hasID bool
-	var id any
-	if db.idGenerator != nil {
-		id = db.idGenerator()
-		if id != nil {
-			hasID = true
-		}
-	}
+	id, hasID := resolveCreateID(db, mapValue)
 
 	label := getLabelFromValue(value)
 	query := db.g.AddV(label)

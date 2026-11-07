@@ -15,8 +15,9 @@ import (
 //
 // The edge's created_at and last_modified properties are stamped
 // automatically (models can rename or disable last-modified tracking via
-// gsmtypes.LastModifiedPropertyType), BeforeCreate/AfterCreate hooks run,
-// and the generated edge ID is written back to the struct.
+// gsmtypes.LastModifiedPropertyType), and BeforeCreate/AfterCreate hooks run.
+// An ID set on the struct is honoured; otherwise the IDGenerator or the
+// backend supplies one and it is written back to the struct.
 //
 //	person := ...            // existing Person vertex
 //	topic := ...             // existing Topic vertex
@@ -66,15 +67,7 @@ func createEdge[E any](db *GremlinDriver, value *E, from any, to any) error {
 	if err != nil {
 		return err
 	}
-	delete(mapValue, "id")
-	var hasID bool
-	var id any
-	if db.idGenerator != nil {
-		id = db.idGenerator()
-		if id != nil {
-			hasID = true
-		}
-	}
+	id, hasID := resolveCreateID(db, mapValue)
 
 	label := getLabelFromValue(value)
 	query := db.g.V(fromID).AddE(label).To(anonymousTraversal.V(toID))
