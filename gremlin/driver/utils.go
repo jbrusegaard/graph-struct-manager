@@ -227,27 +227,17 @@ func recordNarrowed(
 // Non-addressable values with pointer-receiver implementations are copied so
 // the method can be invoked.
 func serializeGremlinValue(rv reflect.Value) (string, error) {
-	if serializer, ok := reflect.TypeAssert[gsmtypes.SerializerType](rv); ok {
-		serialized, err := serializer.SerializeGremlinValue()
-		if err != nil {
-			return "", fmt.Errorf("serialize %s: %w", rv.Type(), err)
-		}
-		return serialized, nil
+	serializer, ok := reflect.TypeAssert[gsmtypes.SerializerType](rv)
+	if !ok && rv.CanAddr() {
+		serializer, ok = reflect.TypeAssert[gsmtypes.SerializerType](rv.Addr())
 	}
-	if rv.CanAddr() {
-		if serializer, ok := reflect.TypeAssert[gsmtypes.SerializerType](rv.Addr()); ok {
-			serialized, err := serializer.SerializeGremlinValue()
-			if err != nil {
-				return "", fmt.Errorf("serialize %s: %w", rv.Type(), err)
-			}
-			return serialized, nil
-		}
-	}
-	ptr := reflect.New(rv.Type())
-	ptr.Elem().Set(rv)
-	serializer, ok := reflect.TypeAssert[gsmtypes.SerializerType](ptr)
 	if !ok {
-		return "", fmt.Errorf("type %s does not implement gsmtypes.SerializerType", rv.Type())
+		ptr := reflect.New(rv.Type())
+		ptr.Elem().Set(rv)
+		serializer, ok = reflect.TypeAssert[gsmtypes.SerializerType](ptr)
+		if !ok {
+			return "", fmt.Errorf("type %s does not implement gsmtypes.SerializerType", rv.Type())
+		}
 	}
 	serialized, err := serializer.SerializeGremlinValue()
 	if err != nil {
