@@ -54,7 +54,7 @@ var defaultDriverConfig = Config{
 g This is a godoc comment
 */
 func g(remoteConnection *gremlingo.DriverRemoteConnection) *gremlingo.GraphTraversalSource {
-	return gremlingo.Traversal_().WithRemote(remoteConnection)
+	return gremlingo.Traversal_().With(remoteConnection)
 }
 
 func Open(url string, config ...Config) (*GremlinDriver, error) {
