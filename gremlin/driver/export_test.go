@@ -3,6 +3,7 @@ package driver
 import (
 	"reflect"
 
+	gremlingo "github.com/apache/tinkerpop/gremlin-go/v3/driver"
 	"github.com/jbrusegaard/graph-struct-manager/gsmtypes"
 )
 
@@ -62,4 +63,13 @@ func LastModifiedPropertyForTest[T any]() string {
 // Where/Update/Updates for external tests.
 func MaybeSerializeValueForTest(value any) (any, bool, error) {
 	return maybeSerializeValue(value)
+}
+
+// NextWithDefaultValueForTest exposes the Count() read helper, including its
+// mid-stream server-error surfacing, for external tests.
+func NextWithDefaultValueForTest(
+	query *gremlingo.GraphTraversal,
+	defaultVal int,
+) (*gremlingo.Result, int, error) {
+	return nextWithDefaultValue(query, defaultVal)
 }
