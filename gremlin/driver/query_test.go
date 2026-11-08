@@ -35,6 +35,7 @@ func cleanDB(t *testing.T) {
 		t.Errorf("cleanDB: open driver: %v", err)
 		return
 	}
+	defer db.Close()
 	// Report through t so a transient cleanup failure fails exactly the test
 	// that registered it. A panic inside t.Cleanup would abort the whole test
 	// binary, silently skipping every not-yet-started test and blaming the
