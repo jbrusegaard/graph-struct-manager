@@ -1,6 +1,6 @@
 ---
 name: golang
-description: GraphStructManager Go 1.25 + Gremlin guidelines
+description: GraphStructManager Go 1.27 + Gremlin guidelines
 ---
 
 # Overview
@@ -16,8 +16,8 @@ Gremlin traversals.
 
 ## Repository Context
 
-- Go version: 1.25 (module `github.com/jbrusegaard/graph-struct-manager`)
-- Gremlin: Apache TinkerPop `gremlin-go` v3.7.4
+- Go version: 1.27 (module `github.com/jbrusegaard/graph-struct-manager`)
+- Gremlin: Apache TinkerPop `gremlin-go` v3.8.1 (servers must be 3.8.1+; see README Requirements)
 - Core packages: `gremlin/driver`, `gsmtypes`, `comparator`, `log`
 - Public surface: generic query builder (`Query[T gsmtypes.VertexType]`) and helper APIs
 
@@ -51,6 +51,12 @@ Gremlin traversals.
   so new steps show up automatically.
 - `Range` is ignored when `Offset` is set; maintain this behavior and warnings.
 - `Take()` returns the first result; `ID()` performs fast ID lookup using `HasLabel`.
+- Never stack two `By()` modulators on `valueMap()`/`propertyMap()` — 3.8 servers reject the
+  traversal outright ("can only have one by modulator", status 87). The read path uses exactly
+  one `By(unfoldSingleValueTraversal())`.
+- Keep the map read path on `valueMap(true)` + a single `By`: `elementMap` collapses
+  SET-cardinality properties to one value server-side (verified on 3.8.1) and would silently
+  drop values. Any future switch must keep `cardinality_load_test.go` green deliberately.
 
 ## Struct Mapping and Tags
 
@@ -75,4 +81,7 @@ Gremlin traversals.
 ## Testing and Docs
 
 - Prefer table-driven tests and cover exported behavior.
+- Live tests hit `GREMLIN_TEST_URL` (default `ws://localhost:8182`, server must be 3.8.1+) in
+  `GREMLIN_TEST_DRIVER` mode (`neptune` default = set cardinality; `gremlin` = list). Run both
+  modes when touching cardinality or the map read path.
 - If you change public API or query semantics, update `README.md` examples to match.
