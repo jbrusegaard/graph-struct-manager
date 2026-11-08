@@ -25,6 +25,18 @@ func TestRawQueryRejectsTraversalValues(t *testing.T) {
 	if !strings.Contains(err.Error(), "use Where instead") {
 		t.Errorf("Expected guard guidance in error, got %v", err)
 	}
+
+	// The guard must stick: Next, as a second consumer of the same
+	// traversal, surfaces the same error instead of executing it.
+	_, err = db.Label(label).
+		Has("name", gremlingo.T__.Has("name", "roundtrip")).
+		Next()
+	if err == nil {
+		t.Fatal("Expected guarded Next to be rejected, got nil error")
+	}
+	if !strings.Contains(err.Error(), "use Where instead") {
+		t.Errorf("Expected guard guidance from Next, got %v", err)
+	}
 }
 
 // TestRawQueryNextReturnsElementMap smoke-tests the elementMap-backed Next:
