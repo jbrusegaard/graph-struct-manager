@@ -1,6 +1,8 @@
 package driver
 
 import (
+	"fmt"
+
 	gremlingo "github.com/apache/tinkerpop/gremlin-go/v3/driver"
 )
 
@@ -42,7 +44,7 @@ func (rq *RawQuery) ToList() ([]*gremlingo.Result, error) {
 	rq.db.logTraversal(rq.traversal)
 	results, err := rq.traversal.ToList()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("raw query list label %s: %w", rq.label, err)
 	}
 	rq.traversal = nil
 	return results, nil
@@ -56,7 +58,7 @@ func (rq *RawQuery) Next() (*gremlingo.Result, error) {
 	rq.db.logTraversal(traversal)
 	result, err := traversal.Next()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("raw query next label %s: %w", rq.label, err)
 	}
 	rq.traversal = nil
 	return result, nil

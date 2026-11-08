@@ -17,16 +17,16 @@ type testTopic struct {
 
 type testPerson struct {
 	gsmtypes.Vertex
-	Name       string       `json:"name"   gremlin:"name"`
-	Topics     []testTopic  `json:"topics"                gremlinEdge:"subscribed"`
-	BestFriend *testPerson  `json:"bestFriend"            gremlinEdge:"best_friend,out"`
-	Friends    []testPerson `json:"friends"               gremlinEdge:"friend,both"`
+	Name       string       `json:"name"       gremlin:"name"`
+	Topics     []testTopic  `json:"topics"                    gremlinEdge:"subscribed"`
+	BestFriend *testPerson  `json:"bestFriend"                gremlinEdge:"best_friend,out"`
+	Friends    []testPerson `json:"friends"                   gremlinEdge:"friend,both"`
 }
 
 type testTopicWithSubscribers struct {
 	gsmtypes.Vertex
-	Title       string       `json:"title" gremlin:"title"`
-	Subscribers []testPerson `json:"subscribers" gremlinEdge:"subscribed,in"`
+	Title       string       `json:"title"       gremlin:"title"`
+	Subscribers []testPerson `json:"subscribers"                 gremlinEdge:"subscribed,in"`
 }
 
 func (t *testTopicWithSubscribers) Label() string {
@@ -83,18 +83,18 @@ func seedPreloadData(t *testing.T, db *driver.GremlinDriver) (testPerson, []test
 }
 
 func TestPreload(t *testing.T) {
-	db, err := driver.Open(
+	db, openErr := driver.Open(
 		DbURL, driver.Config{
 			Driver: dbDriver,
 		},
 	)
-	if err != nil {
-		t.Fatal(err)
+	if openErr != nil {
+		t.Fatal(openErr)
 	}
 
 	t.Run(
 		"TestPreloadSliceOut", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			_, topics := seedPreloadData(t, db)
 
 			result, err := driver.Model[testPerson](db).Preload("Topics").Take()
@@ -120,7 +120,7 @@ func TestPreload(t *testing.T) {
 
 	t.Run(
 		"TestPreloadDedup", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			person := testPerson{Name: "alice"}
 			if err := driver.Create(db, &person); err != nil {
 				t.Fatal(err)
@@ -161,7 +161,7 @@ func TestPreload(t *testing.T) {
 
 	t.Run(
 		"TestPreloadDedupNested", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			person := testPersonNested{Name: "alice"}
 			if err := driver.Create(db, &person); err != nil {
 				t.Fatal(err)
@@ -197,7 +197,7 @@ func TestPreload(t *testing.T) {
 
 	t.Run(
 		"TestPreloadWithFind", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			seedPreloadData(t, db)
 			// second person with no subscriptions
 			bob := testPerson{Name: "bob"}
@@ -229,7 +229,7 @@ func TestPreload(t *testing.T) {
 
 	t.Run(
 		"TestPreloadInDirection", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			person, topics := seedPreloadData(t, db)
 
 			result, err := driver.Model[testTopicWithSubscribers](db).
@@ -250,7 +250,7 @@ func TestPreload(t *testing.T) {
 
 	t.Run(
 		"TestPreloadPointerField", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			alice := testPerson{Name: "alice"}
 			bob := testPerson{Name: "bob"}
 			if err := driver.Create(db, &alice); err != nil {
@@ -291,7 +291,7 @@ func TestPreload(t *testing.T) {
 
 	t.Run(
 		"TestPreloadBothDirection", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			alice := testPerson{Name: "alice"}
 			bob := testPerson{Name: "bob"}
 			carol := testPerson{Name: "carol"}
@@ -318,7 +318,7 @@ func TestPreload(t *testing.T) {
 
 	t.Run(
 		"TestPreloadMultipleFields", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			person, _ := seedPreloadData(t, db)
 			bob := testPerson{Name: "bob"}
 			if err := driver.Create(db, &bob); err != nil {
@@ -344,7 +344,7 @@ func TestPreload(t *testing.T) {
 
 	t.Run(
 		"TestPreloadWithID", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			person, _ := seedPreloadData(t, db)
 
 			result, err := driver.Model[testPerson](db).Preload("Topics").ID(person.ID)
@@ -359,7 +359,7 @@ func TestPreload(t *testing.T) {
 
 	t.Run(
 		"TestPreloadNested", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			person := testPersonNested{Name: "alice"}
 			if err := driver.Create(db, &person); err != nil {
 				t.Fatal(err)
@@ -418,7 +418,7 @@ func TestPreload(t *testing.T) {
 
 	t.Run(
 		"TestPreloadNestedMergesWithParentPreload", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			person := testPersonNested{Name: "alice"}
 			if err := driver.Create(db, &person); err != nil {
 				t.Fatal(err)
@@ -456,7 +456,7 @@ func TestPreload(t *testing.T) {
 
 	t.Run(
 		"TestPreloadNestedMixedDirections", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			person, topics := seedPreloadData(t, db)
 			bob := testPerson{Name: "bob"}
 			if err := driver.Create(db, &bob); err != nil {
@@ -487,7 +487,7 @@ func TestPreload(t *testing.T) {
 
 	t.Run(
 		"TestPreloadNestedSelfReferential", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			person, topics := seedPreloadData(t, db)
 
 			// topic -[subscribed,in]-> person -[subscribed,out]-> topics
@@ -516,7 +516,7 @@ func TestPreload(t *testing.T) {
 
 	t.Run(
 		"TestPreloadNestedInvalidPathErrors", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			seedPreloadData(t, db)
 
 			_, err := driver.Model[testPersonNested](db).Preload("Topics.NotAField").Find()
@@ -537,7 +537,7 @@ func TestPreload(t *testing.T) {
 
 	t.Run(
 		"TestPreloadUnknownFieldErrors", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			seedPreloadData(t, db)
 
 			_, err := driver.Model[testPerson](db).Preload("NotAField").Find()
@@ -553,7 +553,7 @@ func TestPreload(t *testing.T) {
 
 	t.Run(
 		"TestPreloadFieldWithoutEdgeTagErrors", func(t *testing.T) {
-			t.Cleanup(cleanDB)
+			t.Cleanup(func() { cleanDB(t) })
 			seedPreloadData(t, db)
 
 			_, err := driver.Model[testPerson](db).Preload("Name").Find()
@@ -591,7 +591,12 @@ func TestParseGremlinEdgeTag(t *testing.T) {
 		wantDirection int
 		wantErr       bool
 	}{
-		{name: "label only defaults to out", tag: "subscribed", wantLabel: "subscribed", wantDirection: 0},
+		{
+			name:          "label only defaults to out",
+			tag:           "subscribed",
+			wantLabel:     "subscribed",
+			wantDirection: 0,
+		},
 		{name: "explicit out", tag: "subscribed,out", wantLabel: "subscribed", wantDirection: 0},
 		{name: "in direction", tag: "subscribed,in", wantLabel: "subscribed", wantDirection: 1},
 		{name: "both direction", tag: "friend,both", wantLabel: "friend", wantDirection: 2},

@@ -62,7 +62,7 @@ func seedEdgeEndpoints(
 
 func TestCreateEdge(t *testing.T) {
 	db := openEdgeTestDB(t)
-	t.Cleanup(cleanDB)
+	t.Cleanup(func() { cleanDB(t) })
 	person, topic := seedEdgeEndpoints(t, db)
 
 	sub := subscribesTo{Weight: 1.5, Notes: "daily"}
@@ -111,7 +111,7 @@ func TestCreateEdge(t *testing.T) {
 
 func TestCreateEdgeWithRawIDs(t *testing.T) {
 	db := openEdgeTestDB(t)
-	t.Cleanup(cleanDB)
+	t.Cleanup(func() { cleanDB(t) })
 	person, topic := seedEdgeEndpoints(t, db)
 
 	sub := subscribesTo{Weight: 2}
@@ -132,7 +132,7 @@ func TestCreateEdgeWithRawIDs(t *testing.T) {
 
 func TestCreateEdgeErrors(t *testing.T) {
 	db := openEdgeTestDB(t)
-	t.Cleanup(cleanDB)
+	t.Cleanup(func() { cleanDB(t) })
 	person, topic := seedEdgeEndpoints(t, db)
 
 	t.Run(
@@ -177,7 +177,7 @@ func TestCreateEdgeErrors(t *testing.T) {
 
 func TestSaveEdge(t *testing.T) {
 	db := openEdgeTestDB(t)
-	t.Cleanup(cleanDB)
+	t.Cleanup(func() { cleanDB(t) })
 	person, topic := seedEdgeEndpoints(t, db)
 
 	sub := subscribesTo{Weight: 1}
@@ -220,9 +220,9 @@ func TestSaveEdge(t *testing.T) {
 	t.Run(
 		"NotAnEdgeStruct", func(t *testing.T) {
 			notAnEdge := edgeTestTopic{Title: "not an edge"}
-			err := driver.SaveEdge(db, &notAnEdge, &person, &topic)
-			if err == nil || !strings.Contains(err.Error(), "EdgeType") {
-				t.Errorf("expected EdgeType error, got %v", err)
+			saveErr := driver.SaveEdge(db, &notAnEdge, &person, &topic)
+			if saveErr == nil || !strings.Contains(saveErr.Error(), "EdgeType") {
+				t.Errorf("expected EdgeType error, got %v", saveErr)
 			}
 		},
 	)
@@ -230,7 +230,7 @@ func TestSaveEdge(t *testing.T) {
 
 func TestEdgeQueryBuilder(t *testing.T) {
 	db := openEdgeTestDB(t)
-	t.Cleanup(cleanDB)
+	t.Cleanup(func() { cleanDB(t) })
 	person, _ := seedEdgeEndpoints(t, db)
 
 	weights := []float64{1, 2, 3}
@@ -343,7 +343,7 @@ func TestEdgeQueryBuilder(t *testing.T) {
 
 func TestEdgeUpdatesAndRemoveProperty(t *testing.T) {
 	db := openEdgeTestDB(t)
-	t.Cleanup(cleanDB)
+	t.Cleanup(func() { cleanDB(t) })
 	person, topic := seedEdgeEndpoints(t, db)
 
 	sub := subscribesTo{Weight: 1, Notes: "original"}
@@ -390,8 +390,8 @@ func TestEdgeUpdatesAndRemoveProperty(t *testing.T) {
 
 	t.Run(
 		"UnknownProperty", func(t *testing.T) {
-			err := driver.Edge[subscribesTo](db).Update("unknown_property", 1)
-			if err == nil {
+			updateErr := driver.Edge[subscribesTo](db).Update("unknown_property", 1)
+			if updateErr == nil {
 				t.Error("expected error updating unknown property")
 			}
 		},
@@ -437,7 +437,7 @@ func (h *hookEdge) AfterFind(_ *driver.GremlinDriver) error {
 
 func TestEdgeHooks(t *testing.T) {
 	db := openEdgeTestDB(t)
-	t.Cleanup(cleanDB)
+	t.Cleanup(func() { cleanDB(t) })
 	person, topic := seedEdgeEndpoints(t, db)
 
 	edge := hookEdge{Name: "hooked"}
@@ -482,7 +482,7 @@ func (*edgeWithCustomLabel) Label() string {
 
 func TestEdgeCustomLabel(t *testing.T) {
 	db := openEdgeTestDB(t)
-	t.Cleanup(cleanDB)
+	t.Cleanup(func() { cleanDB(t) })
 	person, topic := seedEdgeEndpoints(t, db)
 
 	edge := edgeWithCustomLabel{Note: "labeled"}
@@ -506,7 +506,7 @@ func TestEdgeCustomLabel(t *testing.T) {
 }
 
 func TestCreateEdgeCustomIDGenerator(t *testing.T) {
-	t.Cleanup(cleanDB)
+	t.Cleanup(func() { cleanDB(t) })
 	personID := uuid.New()
 	topicID := uuid.New()
 	edgeID := uuid.New()
@@ -554,19 +554,19 @@ func TestCreateEdgeCustomIDGenerator(t *testing.T) {
 
 func TestEdgeQueryFromTo(t *testing.T) {
 	db := openEdgeTestDB(t)
-	t.Cleanup(cleanDB)
+	t.Cleanup(func() { cleanDB(t) })
 
 	alice := edgeTestPerson{Name: "alice"}
 	bob := edgeTestPerson{Name: "bob"}
 	topicOne := edgeTestTopic{Title: "one"}
 	topicTwo := edgeTestTopic{Title: "two"}
-	for _, v := range []any{&alice, &bob} {
-		if err := driver.Create(db, v.(*edgeTestPerson)); err != nil {
+	for _, v := range []*edgeTestPerson{&alice, &bob} {
+		if err := driver.Create(db, v); err != nil {
 			t.Fatal(err)
 		}
 	}
-	for _, v := range []any{&topicOne, &topicTwo} {
-		if err := driver.Create(db, v.(*edgeTestTopic)); err != nil {
+	for _, v := range []*edgeTestTopic{&topicOne, &topicTwo} {
+		if err := driver.Create(db, v); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -721,7 +721,7 @@ func TestEdgePreloadNotSupported(t *testing.T) {
 // same edges the vertex Preload API traverses.
 func TestCreateEdgeFeedsPreload(t *testing.T) {
 	db := openEdgeTestDB(t)
-	t.Cleanup(cleanDB)
+	t.Cleanup(func() { cleanDB(t) })
 
 	person := edgeTestPerson{Name: "dave"}
 	if err := driver.Create(db, &person); err != nil {

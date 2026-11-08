@@ -44,6 +44,7 @@ func TestIntegerStringConversions(t *testing.T) {
 			name: "Int32LoadsAsDecimalText",
 			data: map[any]any{"rank": int32(42)},
 			check: func(t *testing.T, v *conversionVertex) {
+				t.Helper()
 				if v.Rank != "42" {
 					t.Errorf("Rank = %q, want %q (decimal text, not rune '*')", v.Rank, "42")
 				}
@@ -53,6 +54,7 @@ func TestIntegerStringConversions(t *testing.T) {
 			name: "Int64LoadsAsDecimalText",
 			data: map[any]any{"rank": int64(2026)},
 			check: func(t *testing.T, v *conversionVertex) {
+				t.Helper()
 				if v.Rank != "2026" {
 					t.Errorf("Rank = %q, want %q (decimal text, not rune mojibake)", v.Rank, "2026")
 				}
@@ -62,6 +64,7 @@ func TestIntegerStringConversions(t *testing.T) {
 			name: "UnsignedIntLoadsAsDecimalText",
 			data: map[any]any{"rank": uint64(65)},
 			check: func(t *testing.T, v *conversionVertex) {
+				t.Helper()
 				if v.Rank != "65" {
 					t.Errorf("Rank = %q, want %q", v.Rank, "65")
 				}
@@ -71,6 +74,7 @@ func TestIntegerStringConversions(t *testing.T) {
 			name: "UintptrLoadsAsDecimalText",
 			data: map[any]any{"rank": uintptr(7)},
 			check: func(t *testing.T, v *conversionVertex) {
+				t.Helper()
 				if v.Rank != "7" {
 					t.Errorf("Rank = %q, want %q (decimal text, not rune '\\a')", v.Rank, "7")
 				}
@@ -80,8 +84,13 @@ func TestIntegerStringConversions(t *testing.T) {
 			name: "FloatLoadsAsDecimalText",
 			data: map[any]any{"ratioText": float64(3.5)},
 			check: func(t *testing.T, v *conversionVertex) {
+				t.Helper()
 				if v.RatioText != "3.5" {
-					t.Errorf("RatioText = %q, want %q (shortest round-trip decimal)", v.RatioText, "3.5")
+					t.Errorf(
+						"RatioText = %q, want %q (shortest round-trip decimal)",
+						v.RatioText,
+						"3.5",
+					)
 				}
 			},
 		},
@@ -89,6 +98,7 @@ func TestIntegerStringConversions(t *testing.T) {
 			name: "WholeFloatDropsTrailingZero",
 			data: map[any]any{"ratioText": float64(8)},
 			check: func(t *testing.T, v *conversionVertex) {
+				t.Helper()
 				if v.RatioText != "8" {
 					t.Errorf("RatioText = %q, want %q", v.RatioText, "8")
 				}
@@ -99,6 +109,7 @@ func TestIntegerStringConversions(t *testing.T) {
 			data:  map[any]any{"rank": []any{int32(1), int32(2)}},
 			start: &conversionVertex{Rank: "unchanged"},
 			check: func(t *testing.T, v *conversionVertex) {
+				t.Helper()
 				if v.Rank != "1" {
 					t.Errorf("Rank = %q, want %q", v.Rank, "1")
 				}
@@ -108,6 +119,7 @@ func TestIntegerStringConversions(t *testing.T) {
 			name: "IntegerLoadsIntoPointerStringField",
 			data: map[any]any{"score": int64(5)},
 			check: func(t *testing.T, v *conversionVertex) {
+				t.Helper()
 				if v.Score == nil {
 					t.Fatalf(`Score = nil, want pointer to "5"`)
 				}
@@ -120,6 +132,7 @@ func TestIntegerStringConversions(t *testing.T) {
 			name: "IntegerElementsLoadIntoStringSlice",
 			data: map[any]any{"weights": []any{int64(7), "eight"}},
 			check: func(t *testing.T, v *conversionVertex) {
+				t.Helper()
 				if want := []string{"7", "eight"}; !reflect.DeepEqual(v.Weights, want) {
 					t.Errorf("Weights = %#v, want %#v", v.Weights, want)
 				}
@@ -129,6 +142,7 @@ func TestIntegerStringConversions(t *testing.T) {
 			name: "IntegerElementsLoadIntoPointerStringSlice",
 			data: map[any]any{"ptrWeights": []any{int64(7), "eight"}},
 			check: func(t *testing.T, v *conversionVertex) {
+				t.Helper()
 				if len(v.PtrWeights) != 2 || v.PtrWeights[0] == nil || v.PtrWeights[1] == nil {
 					t.Fatalf(`PtrWeights = %#v, want two non-nil pointers`, v.PtrWeights)
 				}
@@ -142,6 +156,7 @@ func TestIntegerStringConversions(t *testing.T) {
 			name: "IntegerWrapsIntoStringSlice",
 			data: map[any]any{"weights": int64(7)},
 			check: func(t *testing.T, v *conversionVertex) {
+				t.Helper()
 				if want := []string{"7"}; !reflect.DeepEqual(v.Weights, want) {
 					t.Errorf("Weights = %#v, want %#v", v.Weights, want)
 				}
@@ -151,6 +166,7 @@ func TestIntegerStringConversions(t *testing.T) {
 			name: "IntegerWrapsIntoPointerStringSlice",
 			data: map[any]any{"ptrWeights": int64(7)},
 			check: func(t *testing.T, v *conversionVertex) {
+				t.Helper()
 				if len(v.PtrWeights) != 1 || v.PtrWeights[0] == nil {
 					t.Fatalf(`PtrWeights = %#v, want [ptr("7")]`, v.PtrWeights)
 				}
@@ -163,6 +179,7 @@ func TestIntegerStringConversions(t *testing.T) {
 			name: "StringDoesNotDecodeIntoIntegerFields",
 			data: map[any]any{"quantity": "42", "ratio": "3.5"},
 			check: func(t *testing.T, v *conversionVertex) {
+				t.Helper()
 				if v.Quantity != 0 {
 					t.Errorf("Quantity = %d, want 0 (no silent string parsing)", v.Quantity)
 				}
@@ -175,6 +192,7 @@ func TestIntegerStringConversions(t *testing.T) {
 			name: "StringDoesNotDecodeIntoIntSliceAsRunes",
 			data: map[any]any{"ports": "80"},
 			check: func(t *testing.T, v *conversionVertex) {
+				t.Helper()
 				if v.Ports != nil {
 					t.Errorf("Ports = %#v, want nil (must not load as rune codes {56 48})", v.Ports)
 				}
@@ -184,6 +202,7 @@ func TestIntegerStringConversions(t *testing.T) {
 			name: "StringLoadsIntoAnyField",
 			data: map[any]any{"anyValue": "abc"},
 			check: func(t *testing.T, v *conversionVertex) {
+				t.Helper()
 				if v.AnyValue != "abc" {
 					t.Errorf(
 						"AnyValue = %#v, want \"abc\" (strings must survive into any fields)",
@@ -196,6 +215,7 @@ func TestIntegerStringConversions(t *testing.T) {
 			name: "ByteSliceLoadsIntoByteArrayField",
 			data: map[any]any{"fixed": []byte("hell")},
 			check: func(t *testing.T, v *conversionVertex) {
+				t.Helper()
 				if want := [4]byte{'h', 'e', 'l', 'l'}; v.Fixed != want {
 					t.Errorf("Fixed = %#v, want %#v", v.Fixed, want)
 				}
@@ -205,6 +225,7 @@ func TestIntegerStringConversions(t *testing.T) {
 			name: "ByteSliceStillConvertsToString",
 			data: map[any]any{"tag": []byte("hello")},
 			check: func(t *testing.T, v *conversionVertex) {
+				t.Helper()
 				if v.Tag != "hello" {
 					t.Errorf("Tag = %q, want %q", v.Tag, "hello")
 				}
@@ -214,6 +235,7 @@ func TestIntegerStringConversions(t *testing.T) {
 			name: "ByteLoadsAsCharacterNotDecimal",
 			data: map[any]any{"tag": byte('A')},
 			check: func(t *testing.T, v *conversionVertex) {
+				t.Helper()
 				if v.Tag != "A" {
 					t.Errorf("Tag = %q, want %q (character, not decimal %q)", v.Tag, "A", "65")
 				}
@@ -223,6 +245,7 @@ func TestIntegerStringConversions(t *testing.T) {
 			name: "ByteSliceLoadsElementWiseAsCharacters",
 			data: map[any]any{"weights": []byte("hi")},
 			check: func(t *testing.T, v *conversionVertex) {
+				t.Helper()
 				if want := []string{"h", "i"}; !reflect.DeepEqual(v.Weights, want) {
 					t.Errorf("Weights = %#v, want %#v (characters, not byte values)",
 						v.Weights, want)
@@ -233,6 +256,7 @@ func TestIntegerStringConversions(t *testing.T) {
 			name: "ByteSliceLoadsIntoPointerStringSliceAsCharacters",
 			data: map[any]any{"ptrWeights": []byte("hi")},
 			check: func(t *testing.T, v *conversionVertex) {
+				t.Helper()
 				if len(v.PtrWeights) != 2 || v.PtrWeights[0] == nil || v.PtrWeights[1] == nil {
 					t.Fatalf(`PtrWeights = %#v, want two non-nil pointers`, v.PtrWeights)
 				}
@@ -250,6 +274,7 @@ func TestIntegerStringConversions(t *testing.T) {
 				"weights":  []any{"7", "eight"},
 			},
 			check: func(t *testing.T, v *conversionVertex) {
+				t.Helper()
 				if v.Quantity != 7 {
 					t.Errorf("Quantity = %d, want 7", v.Quantity)
 				}

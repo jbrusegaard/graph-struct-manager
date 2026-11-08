@@ -93,7 +93,7 @@ func countProperty(db *driver.GremlinDriver, label, property string) (int, error
 }
 
 func TestLastModifiedTrackingDisabled(t *testing.T) {
-	t.Cleanup(cleanDB)
+	t.Cleanup(func() { cleanDB(t) })
 	db, err := driver.Open(
 		DbURL, driver.Config{
 			Driver: dbDriver,
@@ -150,7 +150,7 @@ func TestLastModifiedTrackingDisabled(t *testing.T) {
 }
 
 func TestLastModifiedTrackingRenamedProperty(t *testing.T) {
-	t.Cleanup(cleanDB)
+	t.Cleanup(func() { cleanDB(t) })
 	db, err := driver.Open(
 		DbURL, driver.Config{
 			Driver: dbDriver,

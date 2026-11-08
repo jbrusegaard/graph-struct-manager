@@ -1,7 +1,7 @@
 package driver_test
 
 import (
-	"fmt"
+	"errors"
 	"testing"
 
 	"github.com/jbrusegaard/graph-struct-manager/gremlin/driver"
@@ -10,7 +10,7 @@ import (
 
 type hookCreateVertex struct {
 	gsmtypes.Vertex
-	Name     string `json:"name" gremlin:"name"`
+	Name     string `json:"name"      gremlin:"name"`
 	HookNote string `json:"hook_note" gremlin:"hook_note"`
 
 	beforeCreateCalled bool
@@ -38,7 +38,7 @@ func (v *hookCreateVertex) AfterCreate(db *driver.GremlinDriver) error {
 
 type hookUpdateVertex struct {
 	gsmtypes.Vertex
-	Name     string `json:"name" gremlin:"name"`
+	Name     string `json:"name"      gremlin:"name"`
 	HookNote string `json:"hook_note" gremlin:"hook_note"`
 
 	beforeUpdateCalled bool
@@ -66,7 +66,7 @@ func (v *hookUpdateVertex) AfterUpdate(db *driver.GremlinDriver) error {
 
 type hookFindVertex struct {
 	gsmtypes.Vertex
-	Name     string `json:"name" gremlin:"name"`
+	Name     string `json:"name"      gremlin:"name"`
 	HookNote string `json:"hook_note" gremlin:"hook_note"`
 
 	afterFindCalled bool
@@ -86,20 +86,20 @@ type hookFindErrorVertex struct {
 }
 
 func (v *hookFindErrorVertex) AfterFind(db *driver.GremlinDriver) error {
-	return fmt.Errorf("after find failed")
+	return errors.New("after find failed")
 }
 
 func TestCreateHooksCreate(t *testing.T) {
-	db, err := driver.Open(
+	db, openErr := driver.Open(
 		DbURL, driver.Config{
 			Driver: dbDriver,
 		},
 	)
-	if err != nil {
-		t.Fatal(err)
+	if openErr != nil {
+		t.Fatal(openErr)
 	}
 	defer db.Close()
-	t.Cleanup(cleanDB)
+	t.Cleanup(func() { cleanDB(t) })
 
 	vertex := &hookCreateVertex{Name: "hook-test"}
 	if err := driver.Create(db, vertex); err != nil {
@@ -129,16 +129,16 @@ func TestCreateHooksCreate(t *testing.T) {
 }
 
 func TestUpdateHooksUpdate(t *testing.T) {
-	db, err := driver.Open(
+	db, openErr := driver.Open(
 		DbURL, driver.Config{
 			Driver: dbDriver,
 		},
 	)
-	if err != nil {
-		t.Fatal(err)
+	if openErr != nil {
+		t.Fatal(openErr)
 	}
 	defer db.Close()
-	t.Cleanup(cleanDB)
+	t.Cleanup(func() { cleanDB(t) })
 
 	vertex := &hookUpdateVertex{Name: "hook-test"}
 	if err := driver.Create(db, vertex); err != nil {
@@ -177,16 +177,16 @@ func TestUpdateHooksUpdate(t *testing.T) {
 }
 
 func TestAfterFindHooks(t *testing.T) {
-	db, err := driver.Open(
+	db, openErr := driver.Open(
 		DbURL, driver.Config{
 			Driver: dbDriver,
 		},
 	)
-	if err != nil {
-		t.Fatal(err)
+	if openErr != nil {
+		t.Fatal(openErr)
 	}
 	defer db.Close()
-	t.Cleanup(cleanDB)
+	t.Cleanup(func() { cleanDB(t) })
 
 	vertices := []hookFindVertex{
 		{Name: "hook-find-1"},
@@ -235,23 +235,23 @@ func TestAfterFindHooks(t *testing.T) {
 }
 
 func TestAfterFindHookError(t *testing.T) {
-	db, err := driver.Open(
+	db, openErr := driver.Open(
 		DbURL, driver.Config{
 			Driver: dbDriver,
 		},
 	)
-	if err != nil {
-		t.Fatal(err)
+	if openErr != nil {
+		t.Fatal(openErr)
 	}
 	defer db.Close()
-	t.Cleanup(cleanDB)
+	t.Cleanup(func() { cleanDB(t) })
 
 	vertex := hookFindErrorVertex{Name: "hook-find-error"}
 	if err := driver.Create(db, &vertex); err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
 
-	_, err = driver.Model[hookFindErrorVertex](db).Take()
+	_, err := driver.Model[hookFindErrorVertex](db).Take()
 	if err == nil {
 		t.Fatal("expected AfterFind error to be returned")
 	}

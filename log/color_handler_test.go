@@ -10,8 +10,6 @@ import (
 	gsmlog "github.com/jbrusegaard/graph-struct-manager/log"
 )
 
-func boolPtr(b bool) *bool { return &b }
-
 func TestColorHandlerLevels(t *testing.T) {
 	t.Parallel()
 
@@ -34,7 +32,7 @@ func TestColorHandlerLevels(t *testing.T) {
 			var buf bytes.Buffer
 			h := gsmlog.NewColorHandler(&buf, &gsmlog.ColorHandlerOptions{
 				Level: slog.LevelDebug,
-				Color: boolPtr(true),
+				Color: new(true),
 			})
 			logger := slog.New(h)
 			logger.Log(context.Background(), tt.level, "hello", "key", "val")
@@ -62,7 +60,7 @@ func TestColorHandlerNoColor(t *testing.T) {
 	var buf bytes.Buffer
 	h := gsmlog.NewColorHandler(&buf, &gsmlog.ColorHandlerOptions{
 		Level: slog.LevelInfo,
-		Color: boolPtr(false),
+		Color: new(false),
 	})
 	logger := slog.New(h)
 	logger.Info("plain message", "k", 1)
@@ -71,7 +69,8 @@ func TestColorHandlerNoColor(t *testing.T) {
 	if strings.Contains(out, "\033[") {
 		t.Errorf("expected no ANSI codes, got %q", out)
 	}
-	if !strings.Contains(out, "INFO") || !strings.Contains(out, "plain message") || !strings.Contains(out, "k=1") {
+	if !strings.Contains(out, "INFO") || !strings.Contains(out, "plain message") ||
+		!strings.Contains(out, "k=1") {
 		t.Errorf("unexpected output %q", out)
 	}
 }
@@ -82,7 +81,7 @@ func TestColorHandlerEnabled(t *testing.T) {
 	var buf bytes.Buffer
 	h := gsmlog.NewColorHandler(&buf, &gsmlog.ColorHandlerOptions{
 		Level: slog.LevelWarn,
-		Color: boolPtr(false),
+		Color: new(false),
 	})
 	logger := slog.New(h)
 	logger.Info("should be filtered")
@@ -98,7 +97,7 @@ func TestColorHandlerWithAttrsAndGroup(t *testing.T) {
 	var buf bytes.Buffer
 	h := gsmlog.NewColorHandler(&buf, &gsmlog.ColorHandlerOptions{
 		Level: slog.LevelInfo,
-		Color: boolPtr(false),
+		Color: new(false),
 	})
 	logger := slog.New(h).With("service", "gsm").WithGroup("req")
 	logger.Info("handled", "id", 42)
