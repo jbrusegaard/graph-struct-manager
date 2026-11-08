@@ -822,6 +822,14 @@ func (q *Query[T]) addQueryConditions(query *gremlingo.GraphTraversal) { //nolin
 //			anonymousTraversal.Identity(),
 //		),
 //	)
+//
+// valueMap is deprecated in TinkerPop 3.8 in favor of elementMap, but the
+// migration was evaluated against a 3.8.1 server and rejected: elementMap
+// collapses SET-cardinality properties to a single (last-written) value
+// server-side, silently losing the rest, while valueMap returns the full
+// list. Neptune-mode loads write SET cardinality, so elementMap would drop
+// data on every multi-valued property. Revisit only with a projection that
+// reads multi-properties correctly (e.g. Project over Properties).
 func ToMapTraversal(
 	query *gremlingo.GraphTraversal,
 	subtraversals map[string]*gremlingo.GraphTraversal,

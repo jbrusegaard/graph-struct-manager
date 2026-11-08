@@ -64,6 +64,9 @@ func (rq *RawQuery) ToList() ([]*gremlingo.Result, error) {
 	return results, nil
 }
 
+// Next fetches one result as an element map. Caveat: elementMap collapses
+// SET-cardinality properties to a single value server-side, so multi-valued
+// properties may arrive truncated; use Model[T] queries for those.
 func (rq *RawQuery) Next() (*gremlingo.Result, error) {
 	if rq.err != nil {
 		return nil, fmt.Errorf("raw query next label %s: %w", rq.label, rq.err)

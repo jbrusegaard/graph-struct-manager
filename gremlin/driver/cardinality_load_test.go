@@ -29,11 +29,11 @@ type cardinalityScalarView struct {
 // contract: a set/list-cardinality property holding exactly ONE value is
 // unfolded to a bare scalar before unload, so no narrowing is reported.
 //
-// The elementMap read-path migration changes this shape: elementMap keeps
-// set/list properties list-wrapped, so the same load becomes a one-element
-// list narrowed to the scalar with 0 discarded. That phase must update this
-// test's assertions deliberately — a silent failure here means the
-// migration shipped an unnoticed load-shape change.
+// The planned elementMap read-path migration was evaluated against a 3.8.1
+// server and rejected: elementMap collapses SET-cardinality properties to a
+// single value server-side (data loss), so the read path stays on valueMap.
+// Any future migration must update this test's assertions deliberately — a
+// silent failure here means it shipped an unnoticed load-shape change.
 func TestSingleValuedMultiPropertyUnwraps(t *testing.T) {
 	db := openTravelerDB(t)
 
