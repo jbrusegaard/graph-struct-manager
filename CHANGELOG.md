@@ -7,6 +7,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [v0.6.4] - 2026-11-07
+
 ### Changed
 
 - Errors from Gremlin server calls and custom `SerializerType`/`DeserializerType` hooks
@@ -14,7 +16,20 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   similar) instead of being returned bare, so a failure names the operation that
   produced it. `errors.Is` and `errors.As` still match through the chain; code that
   matched exact error strings or type-asserted the raw driver error directly (for
-  example `err.(*gremlingo.GremlinError)`) should switch to `errors.As`.
+  example `err.(*gremlingo.GremlinError)`) should switch to `errors.As`. (#57)
+
+### Added
+
+- `make verify` runs the commit-readiness gate in one command: lint, race tests,
+  total coverage of at least 80%, patch coverage of at least 80% against `main`,
+  gosec + govulncheck, a dead-code check, and a build check. Existing targets are
+  unchanged. (#56)
+- Contributor linting now covers test files, which a golangci-lint v1-to-v2 migration
+  had silently exempted, and the `wrapcheck`, `thelper`, `misspell` and `prealloc`
+  linters are enabled; all 130 findings this surfaced are cleared, with no `//nolint`
+  suppressions. (#57)
+
+## [v0.6.3] - 2026-11-04
 
 ### Fixed
 
@@ -36,24 +51,29 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   now converts only to `string` or `[]byte`. Numeric-to-numeric and `[]byte`-to-`string`
   conversions are unaffected, and `byte` (`uint8`) sources keep their character semantics:
   `byte('A')` loads into a `string` field as `"A"`, not `"65"`, so a `[]byte` arriving at
-  a `[]string` field still loads as characters.
+  a `[]string` field still loads as characters. (#55)
+
+## [v0.6.2] - 2026-10-15
+
+### Fixed
+
 - A property holding several values no longer loads a single-valued field as its zero
   value. Every Neptune vertex property is set-cardinality, so a field that models one
   value still receives a list once the property holds more than one; the first value is
   now kept, matching how Gremlin itself narrows a property reference. Applies to every
   scalar kind (`string`, numeric, `bool`). Slice fields, `[]byte`-to-`string` conversions
-  and fixed-size arrays are unaffected.
+  and fixed-size arrays are unaffected. (#51)
 
 ### Added
 
 - `Find`, `Take` and `ID` log a warning naming the property, the struct field and how many
   values were discarded whenever the narrowing above happens. Set-cardinality writes are
   easy to make by accident and hard to discover from the loaded struct alone, so the loss
-  is surfaced rather than left to be noticed as an unexpectedly blank or stale field.
+  is surfaced rather than left to be noticed as an unexpectedly blank or stale field. (#51)
 - `UnloadGremlinResultIntoStructReportingNarrowed` returns the same information as
   `[]NarrowedProperty` for callers that unload results themselves.
   `UnloadGremlinResultIntoStruct` is unchanged. Narrowing inside a preloaded vertex is not
-  reported, for the same reason its errors are not: that path cannot surface either.
+  reported, for the same reason its errors are not: that path cannot surface either. (#51)
 
 ## [v0.6.1] - 2026-10-12
 
