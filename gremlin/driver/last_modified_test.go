@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	gremlingo "github.com/apache/tinkerpop/gremlin-go/v3/driver"
 	"github.com/jbrusegaard/graph-struct-manager/comparator"
 	"github.com/jbrusegaard/graph-struct-manager/gremlin/driver"
 	"github.com/jbrusegaard/graph-struct-manager/gsmtypes"
@@ -228,15 +229,15 @@ func countEdgeProperty(db *driver.GremlinDriver, label, property string) (int, e
 	return result.GetInt()
 }
 
-// edgePropertyTime reads a single time-valued edge property directly from
-// the store, bypassing struct mapping.
-func edgePropertyTime(
-	t *testing.T, db *driver.GremlinDriver, id any, property string,
+// elementPropertyTime reads a single time-valued property from the element
+// the traversal selects, bypassing struct mapping entirely.
+func elementPropertyTime(
+	t *testing.T, traversal *gremlingo.GraphTraversal, property string,
 ) time.Time {
 	t.Helper()
-	result, err := db.G().E(id).Values(property).Next()
+	result, err := traversal.Values(property).Next()
 	if err != nil {
-		t.Fatalf("read edge property %s: %v", property, err)
+		t.Fatalf("read property %s: %v", property, err)
 	}
 	switch ts := result.GetInterface().(type) {
 	case time.Time:
@@ -246,7 +247,7 @@ func edgePropertyTime(
 			return *ts
 		}
 	}
-	t.Fatalf("edge property %s is %T, want a time", property, result.GetInterface())
+	t.Fatalf("property %s is %T, want a time", property, result.GetInterface())
 	return time.Time{}
 }
 
@@ -340,10 +341,9 @@ func TestEdgeLastModifiedDisabledExplicitValuePersisted(t *testing.T) {
 	if err := driver.SaveEdge(db, &edge, &person, &topic); err != nil {
 		t.Fatal(err)
 	}
-	if got := edgePropertyTime(
+	if got := elementPropertyTime(
 		t,
-		db,
-		edge.ID,
+		db.G().E(edge.ID),
 		gsmtypes.LastModified,
 	); !got.Equal(
 		storedLastModified,
@@ -355,10 +355,9 @@ func TestEdgeLastModifiedDisabledExplicitValuePersisted(t *testing.T) {
 	if err := driver.SaveEdge(db, &edge, &person, &topic); err != nil {
 		t.Fatal(err)
 	}
-	if got := edgePropertyTime(
+	if got := elementPropertyTime(
 		t,
-		db,
-		edge.ID,
+		db.G().E(edge.ID),
 		gsmtypes.LastModified,
 	); !got.Equal(
 		storedLastModified,
@@ -416,26 +415,16 @@ func TestEmbeddedVertexLastModifiedTrackingDisabled(t *testing.T) {
 	if saveErr := driver.Save(db, &v); saveErr != nil {
 		t.Fatal(saveErr)
 	}
-	result, err := db.G().V(v.ID).Values(gsmtypes.LastModified).Next()
-	if err != nil {
-		t.Fatal(err)
-	}
-	ts, ok := result.GetInterface().(*time.Time)
-	if !ok {
-		plain, isTime := result.GetInterface().(time.Time)
-		if !isTime {
-			t.Fatalf(
-				"vertex property %s is %T, want a time",
-				gsmtypes.LastModified,
-				result.GetInterface(),
-			)
-		}
-		ts = &plain
-	}
-	if !ts.Equal(storedLastModified) {
+	if got := elementPropertyTime(
+		t,
+		db.G().V(v.ID),
+		gsmtypes.LastModified,
+	); !got.Equal(
+		storedLastModified,
+	) {
 		t.Errorf(
 			"Expected stored last_modified %v, got %v",
-			storedLastModified, ts,
+			storedLastModified, got,
 		)
 	}
 }
