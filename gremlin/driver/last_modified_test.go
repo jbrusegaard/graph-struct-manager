@@ -428,3 +428,82 @@ func TestEmbeddedVertexLastModifiedTrackingDisabled(t *testing.T) {
 		)
 	}
 }
+
+// renamedSetterVertex is the README's rename recipe: tracking is renamed to
+// updated_at and SetVertexLastModified is overridden to fill that custom
+// field, leaving the embedded gsmtypes.Vertex LastModified zero forever.
+// That zero must never reach the store.
+type renamedSetterVertex struct {
+	gsmtypes.Vertex
+	Name      string    `gremlin:"name"`
+	UpdatedAt time.Time `gremlin:"updated_at"`
+}
+
+// LastModifiedProperty renames the automatically tracked property.
+func (r *renamedSetterVertex) LastModifiedProperty() string { return "updated_at" }
+
+// SetVertexLastModified routes the driver's stamp into the custom field.
+func (r *renamedSetterVertex) SetVertexLastModified(ts time.Time) { r.UpdatedAt = ts }
+
+func TestRenamedLastModifiedZeroEmbeddedFieldSkipped(t *testing.T) {
+	db := openEdgeTestDB(t)
+	t.Cleanup(func() { cleanDB(t) })
+	label := driver.GetLabel[renamedSetterVertex]()
+
+	v := renamedSetterVertex{Name: "article"}
+	if err := driver.Create(db, &v); err != nil {
+		t.Fatal(err)
+	}
+	if v.UpdatedAt.IsZero() {
+		t.Fatal("Create should stamp the renamed tracked field")
+	}
+	// The skip must stay scoped to last_modified: created_at is still stamped.
+	created, err := countProperty(db, label, gsmtypes.CreatedAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created != 1 {
+		t.Errorf(
+			"Expected 1 %s property on %s vertices, found %d",
+			gsmtypes.CreatedAt, label, created,
+		)
+	}
+	// The stamp lands on the custom field, through its gremlin tag.
+	// java.util.Date round-trips at millisecond precision.
+	if got := elementPropertyTime(t, db.G().V(v.ID), "updated_at"); !got.Equal(
+		v.UpdatedAt.Truncate(time.Millisecond),
+	) {
+		t.Errorf("Expected stored updated_at %v, got %v", v.UpdatedAt, got)
+	}
+	// The superseded embedded zero field must not be persisted.
+	count, err := countProperty(db, label, gsmtypes.LastModified)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Errorf(
+			"Expected no %s property on %s vertices, found %d",
+			gsmtypes.LastModified, label, count,
+		)
+	}
+
+	v.Name = "edited"
+	if saveErr := driver.Save(db, &v); saveErr != nil {
+		t.Fatal(saveErr)
+	}
+	count, err = countProperty(db, label, gsmtypes.LastModified)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Errorf(
+			"Expected no %s property on %s vertices after Save, found %d",
+			gsmtypes.LastModified, label, count,
+		)
+	}
+	if got := elementPropertyTime(t, db.G().V(v.ID), "updated_at"); !got.Equal(
+		v.UpdatedAt.Truncate(time.Millisecond),
+	) {
+		t.Errorf("Expected refreshed updated_at %v, got %v", v.UpdatedAt, got)
+	}
+}

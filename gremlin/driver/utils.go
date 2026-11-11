@@ -644,15 +644,17 @@ func structToMap(
 			fieldValue = dereferenced
 		}
 
-		// With automatic tracking disabled (LastModifiedPropertyType returns
-		// ""), a zero last-modified field means "never set": embedded
-		// gsmtypes.Vertex/Edge carry a gremlin:"last_modified" tag that would
-		// otherwise persist 0001-01-01T00:00:00Z on every save, making
-		// tracking impossible to disable for embedded models. Skipping the
-		// zero value keeps the documented contract: only explicitly set
-		// values are written.
-		if schema.lastModifiedProperty == "" &&
-			fieldSchema.tagName == gsmtypes.LastModified &&
+		// A zero last-modified field tagged "last_modified" is junk on the
+		// wire whenever it is not the tracked property: either tracking is
+		// disabled (LastModifiedPropertyType returns "") or the model
+		// renamed tracking and redirected its setter to a custom field,
+		// leaving this embedded gsmtypes.Vertex/Edge field zero forever.
+		// Writing it would persist 0001-01-01T00:00:00Z on every save and
+		// make tracking impossible to disable for embedded models; skipping
+		// it keeps the documented contract that only explicitly set values
+		// are written.
+		if fieldSchema.tagName == gsmtypes.LastModified &&
+			fieldSchema.tagName != schema.lastModifiedProperty &&
 			fieldValue.IsZero() {
 			continue
 		}

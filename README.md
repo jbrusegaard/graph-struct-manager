@@ -306,7 +306,7 @@ With tracking disabled:
 **Important notes:**
 - Models that don't implement the interface keep the default `last_modified` behavior, so existing code is unaffected.
 - The property is resolved once per model type from a zero value and cached; the implementation must return a constant that does not depend on receiver state.
-- For struct-based writes (`Create`/`Save`), the persisted property name always comes from the field's `gremlin` tag. If you rename the tracked property, also override `SetVertexLastModified`/`GetVertexLastModified` to use your custom field, or avoid embedding `types.Vertex`'s `last_modified` tag.
+- For struct-based writes (`Create`/`Save`), the persisted property name always comes from the field's `gremlin` tag. If you rename the tracked property, also override `SetVertexLastModified`/`GetVertexLastModified` to use your custom field, or avoid embedding `types.Vertex`'s `last_modified` tag. Either way, a zero `last_modified` field is skipped on struct-based writes whenever it is not the tracked property, so an overridden setter never leaves a `0001-01-01T00:00:00Z` property behind.
 
 ### Custom IDs
 
