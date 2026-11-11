@@ -196,3 +196,246 @@ func TestLastModifiedTrackingRenamedProperty(t *testing.T) {
 		)
 	}
 }
+
+// edgeNoTracking embeds gsmtypes.Edge with automatic last-modified tracking
+// disabled. The embedded gremlin tag is the write path that used to leak a
+// zero timestamp to the store on every edge save even with tracking off.
+type edgeNoTracking struct {
+	gsmtypes.Edge
+	Weight float64 `gremlin:"weight"`
+}
+
+// LastModifiedProperty disables automatic last-modified tracking.
+func (e *edgeNoTracking) LastModifiedProperty() string { return "" }
+
+// vertexNoTracking is the embedded-vertex counterpart of edgeNoTracking:
+// tracking disabled while the embedded tag still maps LastModified.
+type vertexNoTracking struct {
+	gsmtypes.Vertex
+	Name string `gremlin:"name"`
+}
+
+// LastModifiedProperty disables automatic last-modified tracking.
+func (v *vertexNoTracking) LastModifiedProperty() string { return "" }
+
+// countEdgeProperty returns how many values of the given property exist on
+// edges with the given label, bypassing struct mapping entirely.
+func countEdgeProperty(db *driver.GremlinDriver, label, property string) (int, error) {
+	result, err := db.G().E().HasLabel(label).Properties(property).Count().Next()
+	if err != nil {
+		return 0, err
+	}
+	return result.GetInt()
+}
+
+// edgePropertyTime reads a single time-valued edge property directly from
+// the store, bypassing struct mapping.
+func edgePropertyTime(
+	t *testing.T, db *driver.GremlinDriver, id any, property string,
+) time.Time {
+	t.Helper()
+	result, err := db.G().E(id).Values(property).Next()
+	if err != nil {
+		t.Fatalf("read edge property %s: %v", property, err)
+	}
+	switch ts := result.GetInterface().(type) {
+	case time.Time:
+		return ts
+	case *time.Time:
+		if ts != nil {
+			return *ts
+		}
+	}
+	t.Fatalf("edge property %s is %T, want a time", property, result.GetInterface())
+	return time.Time{}
+}
+
+func TestEdgeLastModifiedTrackingDisabled(t *testing.T) {
+	db := openEdgeTestDB(t)
+	t.Cleanup(func() { cleanDB(t) })
+	person, topic := seedEdgeEndpoints(t, db)
+	label := driver.GetLabel[edgeNoTracking]()
+
+	edge := edgeNoTracking{Weight: 2.5}
+	if err := driver.SaveEdge(db, &edge, &person, &topic); err != nil {
+		t.Fatal(err)
+	}
+	if !edge.LastModified.IsZero() {
+		t.Errorf(
+			"SaveEdge create should not stamp last modified when tracking is disabled, got %v",
+			edge.LastModified,
+		)
+	}
+	count, err := countEdgeProperty(db, label, gsmtypes.LastModified)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Errorf(
+			"Expected no %s property on %s edges, found %d",
+			gsmtypes.LastModified, label, count,
+		)
+	}
+	// The skip must stay scoped to last_modified: created_at is still stamped.
+	if edge.CreatedAt.IsZero() {
+		t.Error("edge CreatedAt should still be stamped on create")
+	}
+	created, err := countEdgeProperty(db, label, gsmtypes.CreatedAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created != 1 {
+		t.Errorf("Expected 1 %s property on %s edges, found %d", gsmtypes.CreatedAt, label, created)
+	}
+
+	edge.Weight = 3.5
+	if saveErr := driver.SaveEdge(db, &edge, &person, &topic); saveErr != nil {
+		t.Fatal(saveErr)
+	}
+	if !edge.LastModified.IsZero() {
+		t.Errorf(
+			"SaveEdge update should not stamp last modified when tracking is disabled, got %v",
+			edge.LastModified,
+		)
+	}
+	count, err = countEdgeProperty(db, label, gsmtypes.LastModified)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Errorf(
+			"Expected no %s property after SaveEdge update, found %d",
+			gsmtypes.LastModified, count,
+		)
+	}
+
+	if updateErr := driver.Edge[edgeNoTracking](db).
+		Where("weight", comparator.EQ, 3.5).
+		Update("weight", 4.5); updateErr != nil {
+		t.Fatal(updateErr)
+	}
+	count, err = countEdgeProperty(db, label, gsmtypes.LastModified)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Errorf(
+			"Expected no %s property after Update, found %d",
+			gsmtypes.LastModified, count,
+		)
+	}
+}
+
+// storedLastModified is an explicit, millisecond-exact timestamp so the
+// value round-trips through the server's Date serialization unchanged.
+var storedLastModified = time.Date(2020, 5, 6, 7, 8, 9, 0, time.UTC)
+
+func TestEdgeLastModifiedDisabledExplicitValuePersisted(t *testing.T) {
+	db := openEdgeTestDB(t)
+	t.Cleanup(func() { cleanDB(t) })
+	person, topic := seedEdgeEndpoints(t, db)
+
+	edge := edgeNoTracking{Weight: 1.0}
+	edge.SetEdgeLastModified(storedLastModified)
+	if err := driver.SaveEdge(db, &edge, &person, &topic); err != nil {
+		t.Fatal(err)
+	}
+	if got := edgePropertyTime(
+		t,
+		db,
+		edge.ID,
+		gsmtypes.LastModified,
+	); !got.Equal(
+		storedLastModified,
+	) {
+		t.Errorf("Expected stored last_modified %v, got %v", storedLastModified, got)
+	}
+
+	edge.Weight = 2.0
+	if err := driver.SaveEdge(db, &edge, &person, &topic); err != nil {
+		t.Fatal(err)
+	}
+	if got := edgePropertyTime(
+		t,
+		db,
+		edge.ID,
+		gsmtypes.LastModified,
+	); !got.Equal(
+		storedLastModified,
+	) {
+		t.Errorf(
+			"Expected last_modified to keep the explicit value %v after update, got %v",
+			storedLastModified, got,
+		)
+	}
+}
+
+func TestEmbeddedVertexLastModifiedTrackingDisabled(t *testing.T) {
+	db := openEdgeTestDB(t)
+	t.Cleanup(func() { cleanDB(t) })
+	label := driver.GetLabel[vertexNoTracking]()
+
+	v := vertexNoTracking{Name: "silent"}
+	if err := driver.Create(db, &v); err != nil {
+		t.Fatal(err)
+	}
+	if !v.LastModified.IsZero() {
+		t.Errorf(
+			"Create should not stamp last modified when tracking is disabled, got %v",
+			v.LastModified,
+		)
+	}
+	count, err := countProperty(db, label, gsmtypes.LastModified)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Errorf(
+			"Expected no %s property on %s vertices, found %d",
+			gsmtypes.LastModified, label, count,
+		)
+	}
+
+	v.Name = "still-silent"
+	if saveErr := driver.Save(db, &v); saveErr != nil {
+		t.Fatal(saveErr)
+	}
+	count, err = countProperty(db, label, gsmtypes.LastModified)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Errorf(
+			"Expected no %s property after Save, found %d",
+			gsmtypes.LastModified, count,
+		)
+	}
+
+	// An explicitly set value stays persisted through the gremlin tag.
+	v.SetVertexLastModified(storedLastModified)
+	if saveErr := driver.Save(db, &v); saveErr != nil {
+		t.Fatal(saveErr)
+	}
+	result, err := db.G().V(v.ID).Values(gsmtypes.LastModified).Next()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts, ok := result.GetInterface().(*time.Time)
+	if !ok {
+		plain, isTime := result.GetInterface().(time.Time)
+		if !isTime {
+			t.Fatalf(
+				"vertex property %s is %T, want a time",
+				gsmtypes.LastModified,
+				result.GetInterface(),
+			)
+		}
+		ts = &plain
+	}
+	if !ts.Equal(storedLastModified) {
+		t.Errorf(
+			"Expected stored last_modified %v, got %v",
+			storedLastModified, ts,
+		)
+	}
+}
