@@ -33,6 +33,7 @@ func openTravelerDB(t *testing.T) *driver.GremlinDriver {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(db.Close)
 	return db
 }
 

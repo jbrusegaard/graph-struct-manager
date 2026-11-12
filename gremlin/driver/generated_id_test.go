@@ -38,6 +38,7 @@ func TestGeneratedIDsRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(db.Close)
 
 	v := testVertex{Name: "gen-first"}
 	if err = driver.Create(db, &v); err != nil {
@@ -99,6 +100,7 @@ func TestServerAssignedIDRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(db.Close)
 
 	v := testVertex{Name: "server-id"}
 	if err = driver.Create(db, &v); err != nil {
