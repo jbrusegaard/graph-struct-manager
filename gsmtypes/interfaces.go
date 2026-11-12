@@ -33,7 +33,13 @@ type CustomLabelType interface {
 // automatic tracking entirely: the driver will never write a last-modified
 // property on its own, and only values set explicitly (for example via
 // SetVertexLastModified before a Save) are persisted through the model's
-// gremlin struct tags.
+// gremlin struct tags. A zero (never-set) last-modified field tagged
+// "last_modified" is skipped on struct-based writes whenever it is not the
+// tracked property (tracking disabled or renamed), so models embedding
+// gsmtypes.Vertex or gsmtypes.Edge can fully opt out, or rename tracking
+// to a custom field, without persisting 0001-01-01T00:00:00Z. Fields whose
+// type implements SerializerType are exempt: their value always goes
+// through the serializer before being written, zero included.
 //
 // Models that do not implement this interface keep the default behavior of
 // always refreshing the LastModified ("last_modified") property.

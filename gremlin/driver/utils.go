@@ -644,6 +644,24 @@ func structToMap(
 			fieldValue = dereferenced
 		}
 
+		// A zero last-modified field tagged "last_modified" is junk on the
+		// wire whenever it is not the tracked property: either tracking is
+		// disabled (LastModifiedPropertyType returns "") or the model
+		// renamed tracking and redirected its setter to a custom field,
+		// leaving this embedded gsmtypes.Vertex/Edge field zero forever.
+		// Writing it would persist 0001-01-01T00:00:00Z on every save and
+		// make tracking impossible to disable for embedded models; skipping
+		// it keeps the documented contract that only explicitly set values
+		// are written. SerializerType fields are exempt: for them the zero
+		// value's serialization is the type's own contract (it may encode a
+		// meaningful sentinel), so the value must reach the serializer.
+		if !fieldSchema.isSerializer &&
+			fieldSchema.tagName == gsmtypes.LastModified &&
+			fieldSchema.tagName != schema.lastModifiedProperty &&
+			fieldValue.IsZero() {
+			continue
+		}
+
 		if fieldSchema.isSerializer {
 			serialized, err := serializeGremlinValue(fieldValue)
 			if err != nil {

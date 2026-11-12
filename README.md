@@ -263,7 +263,7 @@ If you don't implement `Label()`, or if `Label()` returns an empty string, the s
 
 ### Customizing Last-Modified Tracking
 
-By default, GSM automatically refreshes the `last_modified` property whenever a vertex is created (`Create`/`Save`) or updated (`Save`, `Update`, `Updates`). You can rename this property, or disable the automatic tracking entirely, per model by implementing `gsmtypes.LastModifiedPropertyType`:
+By default, GSM automatically refreshes the `last_modified` property whenever a vertex or edge is created (`Create`/`CreateEdge`/`Save`/`SaveEdge`) or updated (`Save`, `SaveEdge`, `Update`, `Updates`). You can rename this property, or disable the automatic tracking entirely, per model by implementing `gsmtypes.LastModifiedPropertyType`:
 
 ```go
 type LastModifiedPropertyType interface {
@@ -303,14 +303,29 @@ func (r *LegacyRecord) LastModifiedProperty() string {
 }
 ```
 
+Edge models opt out the same way:
+
+```go
+type SubscribesTo struct {
+    types.Edge
+    Weight float64 `gremlin:"weight"`
+}
+
+// CreateEdge/SaveEdge will never write a last_modified property for this edge
+func (s *SubscribesTo) LastModifiedProperty() string {
+    return ""
+}
+```
+
 With tracking disabled:
-- `Create` and `Save` no longer call `SetVertexLastModified` automatically, so only values you set explicitly are persisted (through the model's `gremlin` tags).
+- `Create`, `Save`, `CreateEdge` and `SaveEdge` no longer call `SetVertexLastModified`/`SetEdgeLastModified` automatically, so only values you set explicitly are persisted (through the model's `gremlin` tags).
+- A zero (never-set) `last_modified` field is skipped on struct-based writes even when it is tagged — models embedding `types.Vertex`/`types.Edge` no longer persist `0001-01-01T00:00:00Z` behind your back, so tracking can be disabled for edge models the same way as for vertex models. Fields whose type implements `gsmtypes.SerializerType` are exempt: their value always goes through the serializer, zero included.
 - `Query.Update`/`Query.Updates` no longer inject a last-modified property into the update traversal.
 
 **Important notes:**
 - Models that don't implement the interface keep the default `last_modified` behavior, so existing code is unaffected.
 - The property is resolved once per model type from a zero value and cached; the implementation must return a constant that does not depend on receiver state.
-- For struct-based writes (`Create`/`Save`), the persisted property name always comes from the field's `gremlin` tag. If you rename the tracked property, also override `SetVertexLastModified`/`GetVertexLastModified` to use your custom field, or avoid embedding `types.Vertex`'s `last_modified` tag.
+- For struct-based writes (`Create`/`Save`), the persisted property name always comes from the field's `gremlin` tag. If you rename the tracked property, also override `SetVertexLastModified`/`GetVertexLastModified` to use your custom field, or avoid embedding `types.Vertex`'s `last_modified` tag. Either way, a zero `last_modified` field is skipped on struct-based writes whenever it is not the tracked property, so an overridden setter never leaves a `0001-01-01T00:00:00Z` property behind.
 
 ### Custom IDs
 
