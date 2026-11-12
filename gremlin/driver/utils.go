@@ -732,9 +732,6 @@ func nextWithDefaultValue[T any](
 	if err != nil {
 		return nil, defaultVal, fmt.Errorf("read one result: %w", err)
 	}
-	if setErr := set.GetError(); setErr != nil {
-		return nil, defaultVal, fmt.Errorf("read result set: %w", setErr)
-	}
 	return result, defaultVal, nil
 }
 

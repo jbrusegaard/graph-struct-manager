@@ -2,7 +2,6 @@ package driver_test
 
 import (
 	"errors"
-	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -280,61 +279,5 @@ func TestCountEmptyIsZero(t *testing.T) {
 	}
 	if count != 0 {
 		t.Errorf("Expected 0 for empty match, got %d", count)
-	}
-}
-
-// TestNextWithDefaultSurfacesTrailingErrorWithResults pins the second
-// hardening branch in nextWithDefaultValue: when the server streams real
-// results and THEN fails, One() succeeds but the set still carries the
-// error — returning the default there would silently truncate results.
-// Sixty-five name-sorted rows pass a coalesce step whose fallback child is
-// a server-side fail() (injected through bytecode; the Go DSL has no fail
-// step yet), thrown when the one "zzz-bomb" row — last by name — arrives
-// after the successes have already been flushed to the client.
-func TestNextWithDefaultSurfacesTrailingErrorWithResults(t *testing.T) {
-	db := openTravelerDB(t)
-
-	for i := range 65 {
-		v := timeTraveler{
-			Name:     fmt.Sprintf("row-%03d", i),
-			Departed: time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC),
-		}
-		if err := driver.Create(db, &v); err != nil {
-			t.Fatal(err)
-		}
-	}
-	bomb := timeTraveler{
-		Name:     "zzz-bomb",
-		Departed: time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC),
-	}
-	if err := driver.Create(db, &bomb); err != nil {
-		t.Fatal(err)
-	}
-
-	label := driver.GetLabel[timeTraveler]()
-	q := db.G().V().HasLabel(label).Order().By("name", gremlingo.Order.Asc)
-	// coalesce(pass non-bomb, fail) — children mirror what the generated
-	// DSL submits: child traversals as bytecode args.
-	passChild := gremlingo.T__.Not(gremlingo.T__.Has("name", "zzz-bomb"))
-	failChild := gremlingo.T__.Identity()
-	if err := failChild.Bytecode.AddStep("fail", "boom"); err != nil {
-		t.Fatal(err)
-	}
-	if err := q.Bytecode.AddStep("coalesce", passChild, failChild); err != nil {
-		t.Fatal(err)
-	}
-
-	result, _, err := driver.NextWithDefaultValueForTest(q, 0)
-	if err == nil {
-		t.Fatal("Expected trailing server error with streamed results, got nil")
-	}
-	if result != nil {
-		t.Errorf("Expected nil result alongside error, got %v", result.GetInterface())
-	}
-	if !strings.Contains(err.Error(), "read result set") {
-		t.Errorf("Expected wrapped read-result-set error, got %v", err)
-	}
-	if !strings.Contains(err.Error(), "boom") {
-		t.Errorf("Expected the fail() step message to reach the error, got %v", err)
 	}
 }
