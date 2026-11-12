@@ -720,6 +720,12 @@ func nextWithDefaultValue[T any](
 		return nil, defaultVal, fmt.Errorf("get result set: %w", err)
 	}
 	if set.IsEmpty() {
+		// A server failure mid-iteration leaves the set empty with no
+		// results; reporting the default would make Count() claim zero
+		// matches while the real error goes unnoticed.
+		if setErr := set.GetError(); setErr != nil {
+			return nil, defaultVal, fmt.Errorf("read result set: %w", setErr)
+		}
 		return nil, defaultVal, nil
 	}
 	result, _, err := set.One()

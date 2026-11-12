@@ -7,6 +7,42 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- The Gremlin client is pinned to Apache TinkerPop `gremlin-go` v3.8.1 and the dev server
+  image moves to TinkerPop 3.8.1. This makes a server at 3.8.1 or later (AWS Neptune engine
+  1.5.0.0 or later) a hard requirement: the 3.8.1 driver emits the `discard()` step on
+  mutation iterations, which pre-3.8 servers reject. Servers from the 3.6/3.7 era are no
+  longer guaranteed; see the compatibility matrix in the README.
+- `time.Time` and `*time.Time` properties now serialize as GraphBinary `OffsetDateTime`
+  instead of the legacy `Date` type (a 3.8.0 driver change). Reads accept both formats, so
+  existing data keeps loading, but loaded times decode in a fixed-offset zone rather than
+  the sender's location — compare with `Equal`/`UTC`, not `==`. Rollback caveat: a pre-3.8
+  Go driver cannot read dates written after this version, so reverting a shared database
+  once writes have landed means restoring from a snapshot.
+- The map read path deliberately stays on `valueMap(true)` with a single unfolding `By`
+  modulator. The `elementMap` migration was evaluated against a 3.8.1 server and rejected:
+  `elementMap` collapses SET-cardinality properties to one value server-side, silently
+  dropping the rest of every multi-valued property.
+
+### Added
+
+- Live integration tests honor `GREMLIN_TEST_URL` (server URL, default
+  `ws://localhost:8182`) and `GREMLIN_TEST_DRIVER` (`neptune` by default, `gremlin` for
+  list cardinality), so the suite can run against any compliant server in either
+  cardinality mode.
+- Regression tests pinning 3.8.1 driver semantics: `OffsetDateTime` round trips, `OrderBy`
+  across mixed UTC offsets, date range predicates, strictly increasing `last_modified`,
+  single-vs-multi cardinality load shapes with narrowing reports, and the split between
+  real server errors and `ErrNotFound`.
+- `RawQuery.Has` rejects traversal values up front with a "use Where instead" error; the
+  `has(key, traversal)` form it would forward was removed in TinkerPop 3.8.
+
+### Fixed
+
+- `Count` no longer swallows a mid-stream server error as a count of `0`; the underlying
+  failure is returned instead. Genuinely empty results still count as `0`.
+
 ## [v0.6.5] - 2026-11-11
 
 ### Fixed

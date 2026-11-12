@@ -2,7 +2,9 @@ package driver_test
 
 import (
 	"errors"
+	"os"
 	"slices"
+	"strings"
 	"testing"
 
 	gremlingo "github.com/apache/tinkerpop/gremlin-go/v3/driver"
@@ -12,7 +14,18 @@ import (
 	"github.com/jbrusegaard/graph-struct-manager/gsmtypes"
 )
 
-var dbDriver = driver.Neptune
+// dbDriver selects the driver-mode under test. The suite defaults to Neptune
+// semantics (set-cardinality slice writes) so CI keeps exercising the path it
+// has always covered; GREMLIN_TEST_DRIVER=gremlin opts into vanilla
+// single/list-cardinality behavior.
+var dbDriver = testDriverMode()
+
+func testDriverMode() driver.DatabaseDriver {
+	if strings.EqualFold(os.Getenv("GREMLIN_TEST_DRIVER"), "gremlin") {
+		return driver.Gremlin
+	}
+	return driver.Neptune
+}
 
 func seedData(db *driver.GremlinDriver, data []testVertexForUtils) error {
 	for _, d := range data {

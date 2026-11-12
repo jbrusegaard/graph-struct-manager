@@ -469,9 +469,11 @@ func TestRenamedLastModifiedZeroEmbeddedFieldSkipped(t *testing.T) {
 		)
 	}
 	// The stamp lands on the custom field, through its gremlin tag.
-	// java.util.Date round-trips at millisecond precision.
+	// 3.8.1's OffsetDateTime wire format round-trips full nanosecond
+	// precision (the legacy java.util.Date path truncated to
+	// milliseconds), so the comparison is exact.
 	if got := elementPropertyTime(t, db.G().V(v.ID), "updated_at"); !got.Equal(
-		v.UpdatedAt.Truncate(time.Millisecond),
+		v.UpdatedAt,
 	) {
 		t.Errorf("Expected stored updated_at %v, got %v", v.UpdatedAt, got)
 	}
@@ -502,7 +504,7 @@ func TestRenamedLastModifiedZeroEmbeddedFieldSkipped(t *testing.T) {
 		)
 	}
 	if got := elementPropertyTime(t, db.G().V(v.ID), "updated_at"); !got.Equal(
-		v.UpdatedAt.Truncate(time.Millisecond),
+		v.UpdatedAt,
 	) {
 		t.Errorf("Expected refreshed updated_at %v, got %v", v.UpdatedAt, got)
 	}

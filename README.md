@@ -47,8 +47,27 @@ The query builder uses Go generics to provide type-safe operations on vertex typ
 
 ## Requirements
 
-- Go 1.25+
-- Gremlin 3.7.4
+- Go 1.27+
+- Gremlin 3.8.1+
+
+### Version Compatibility
+
+| gsm (gremlin-go) | TinkerPop server | AWS Neptune engine |
+| ---------------- | ---------------- | ------------------ |
+| v3.8.1           | 3.8.1 or later   | 1.5.0.0 or later   |
+
+Servers from the 3.6/3.7 era are no longer guaranteed: the 3.8.1 Go driver
+emits the `discard()` step on mutation iterations, which older servers reject,
+and Neptune's client matrix for engine 1.5.0.0 excludes 3.7.x. Conversely,
+dates written by this version use the GraphBinary `OffsetDateTime` type; an
+older (pre-3.8) Go driver cannot read them back, so rolling gsm back after
+writes means restoring from a snapshot, not just an earlier binary.
+
+On AWS Neptune, the engine's `materializeProperties` parameter defaults to
+`tokens` for websocket/GraphBinary clients: raw element results (for example
+`RawQuery.Next`) may arrive without properties unless the parameter is set to
+`all`. Typed `Model[T]` queries project properties explicitly and are
+unaffected.
 
 ## Setup
 
@@ -779,6 +798,28 @@ export GSM_DEBUG=true
 **Output example:**
 ```
 INFO Running Query: g.V().hasLabel('person').has('name','John').limit(1).valueMap(true,'id','created_at').by(choose(count(local).is(eq(1)),unfold(),identity()))
+```
+
+### GREMLIN_TEST_URL
+
+Test suite only (no effect on library runtime). Points the live integration
+tests at a Gremlin server; defaults to `ws://localhost:8182`. The server must
+be TinkerPop 3.8.1 or later — see [Requirements](#requirements).
+
+**Example:**
+```bash
+export GREMLIN_TEST_URL=ws://localhost:8182
+```
+
+### GREMLIN_TEST_DRIVER
+
+Test suite only (no effect on library runtime). Selects the driver mode the
+live tests run against: `neptune` (default, exercises set-cardinality writes)
+or `gremlin` (list cardinality).
+
+**Example:**
+```bash
+export GREMLIN_TEST_DRIVER=gremlin
 ```
 
 ## Query Builder Functions

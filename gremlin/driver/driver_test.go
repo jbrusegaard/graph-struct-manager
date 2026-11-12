@@ -1,6 +1,7 @@
 package driver_test
 
 import (
+	"os"
 	"testing"
 
 	"github.com/jbrusegaard/graph-struct-manager/comparator"
@@ -13,7 +14,17 @@ type testVertex struct {
 	Name string `json:"name" gremlin:"name"`
 }
 
-const DbURL = "ws://localhost:8182"
+// DbURL points the live suite at an alternate Gremlin server via
+// GREMLIN_TEST_URL; the default is the docker-compose endpoint so
+// make test and CI behavior are unchanged.
+var DbURL = liveDBURL()
+
+func liveDBURL() string {
+	if url := os.Getenv("GREMLIN_TEST_URL"); url != "" {
+		return url
+	}
+	return "ws://localhost:8182"
+}
 
 func TestDriverConnections(t *testing.T) {
 	t.Parallel()
