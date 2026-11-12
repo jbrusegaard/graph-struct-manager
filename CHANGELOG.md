@@ -7,6 +7,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [v0.6.5] - 2026-11-11
+
 ### Fixed
 
 - Disabling automatic last-modified tracking via `gsmtypes.LastModifiedPropertyType`
@@ -20,7 +22,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   zero value still goes through the type's own serialization contract. The skip
   also covers renamed tracking (`LastModifiedProperty` returning a custom
   name): models following the rename recipe with an overridden setter no
-  longer persist the embedded zero timestamp under `last_modified` either.
+  longer persist the embedded zero timestamp under `last_modified` either. (#60)
 
 ## [v0.6.4] - 2026-11-07
 
