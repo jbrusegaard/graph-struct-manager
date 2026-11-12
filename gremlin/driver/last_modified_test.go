@@ -507,3 +507,78 @@ func TestRenamedLastModifiedZeroEmbeddedFieldSkipped(t *testing.T) {
 		t.Errorf("Expected refreshed updated_at %v, got %v", v.UpdatedAt, got)
 	}
 }
+
+// serializedStamp is a SerializerType whose zero value serializes to a
+// meaningful sentinel instead of a junk timestamp: the zero last-modified
+// skip must not preempt the serializer contract.
+type serializedStamp struct{ At time.Time }
+
+// SerializeGremlinValue renders zero as the schema's "never" sentinel.
+func (s serializedStamp) SerializeGremlinValue() (string, error) {
+	if s.At.IsZero() {
+		return "never", nil
+	}
+	return s.At.UTC().Format(time.RFC3339), nil
+}
+
+// serializedStampVertex is a legacy-style model with tracking disabled that
+// persists its modification time through a SerializerType field tagged
+// "last_modified". The driver never stamps it, so the field stays zero
+// unless the model sets it explicitly.
+type serializedStampVertex struct {
+	ID       any             `json:"id"       gremlin:"id"`
+	Name     string          `json:"name"     gremlin:"name"`
+	Modified serializedStamp `json:"modified" gremlin:"last_modified"`
+
+	lastModified time.Time
+}
+
+func (s *serializedStampVertex) GetVertexID() any { return s.ID }
+func (s *serializedStampVertex) GetVertexLastModified() time.Time {
+	return s.lastModified
+}
+func (s *serializedStampVertex) GetVertexCreatedAt() time.Time { return time.Time{} }
+func (s *serializedStampVertex) SetVertexID(id any)            { s.ID = id }
+func (s *serializedStampVertex) SetVertexLastModified(ts time.Time) {
+	s.lastModified = ts
+}
+func (s *serializedStampVertex) SetVertexCreatedAt(time.Time) {}
+
+// LastModifiedProperty disables automatic last-modified tracking.
+func (s *serializedStampVertex) LastModifiedProperty() string { return "" }
+
+// serializedStampProperty reads the string-valued last_modified property of
+// one vertex, bypassing struct mapping entirely.
+func serializedStampProperty(t *testing.T, db *driver.GremlinDriver, id any) string {
+	t.Helper()
+	result, err := db.G().V(id).Values(gsmtypes.LastModified).Next()
+	if err != nil {
+		t.Fatalf("read property %s: %v", gsmtypes.LastModified, err)
+	}
+	return result.GetString()
+}
+
+func TestSerializedLastModifiedZeroReachesSerializer(t *testing.T) {
+	db := openEdgeTestDB(t)
+	t.Cleanup(func() { cleanDB(t) })
+
+	v := serializedStampVertex{Name: "sentinel"}
+	if err := driver.Create(db, &v); err != nil {
+		t.Fatal(err)
+	}
+	// Tracking is disabled, so the field is zero — but it is a
+	// SerializerType: the zero's serialization, not the skip, decides
+	// what is written.
+	if got := serializedStampProperty(t, db, v.ID); got != "never" {
+		t.Errorf("Expected stored last_modified %q, got %q", "never", got)
+	}
+
+	v.Modified = serializedStamp{At: storedLastModified}
+	if saveErr := driver.Save(db, &v); saveErr != nil {
+		t.Fatal(saveErr)
+	}
+	want := storedLastModified.UTC().Format(time.RFC3339)
+	if got := serializedStampProperty(t, db, v.ID); got != want {
+		t.Errorf("Expected stored last_modified %q, got %q", want, got)
+	}
+}

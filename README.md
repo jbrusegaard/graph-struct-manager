@@ -300,7 +300,7 @@ func (s *SubscribesTo) LastModifiedProperty() string {
 
 With tracking disabled:
 - `Create`, `Save`, `CreateEdge` and `SaveEdge` no longer call `SetVertexLastModified`/`SetEdgeLastModified` automatically, so only values you set explicitly are persisted (through the model's `gremlin` tags).
-- A zero (never-set) `last_modified` field is skipped on struct-based writes even when it is tagged — models embedding `types.Vertex`/`types.Edge` no longer persist `0001-01-01T00:00:00Z` behind your back, so tracking can be disabled for edge models the same way as for vertex models.
+- A zero (never-set) `last_modified` field is skipped on struct-based writes even when it is tagged — models embedding `types.Vertex`/`types.Edge` no longer persist `0001-01-01T00:00:00Z` behind your back, so tracking can be disabled for edge models the same way as for vertex models. Fields whose type implements `gsmtypes.SerializerType` are exempt: their value always goes through the serializer, zero included.
 - `Query.Update`/`Query.Updates` no longer inject a last-modified property into the update traversal.
 
 **Important notes:**

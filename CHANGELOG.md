@@ -15,7 +15,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   zero value (`0001-01-01T00:00:00Z`) on every save even with tracking off, so
   there was no way to stop the property being written. A zero, never-set
   last-modified field is now skipped on struct-based writes; explicitly set
-  values are still persisted through the model's `gremlin` tags. The skip
+  values are still persisted through the model's `gremlin` tags. Fields whose
+  type implements `gsmtypes.SerializerType` are exempt from the skip: their
+  zero value still goes through the type's own serialization contract. The skip
   also covers renamed tracking (`LastModifiedProperty` returning a custom
   name): models following the rename recipe with an overridden setter no
   longer persist the embedded zero timestamp under `last_modified` either.

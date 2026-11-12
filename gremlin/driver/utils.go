@@ -652,8 +652,11 @@ func structToMap(
 		// Writing it would persist 0001-01-01T00:00:00Z on every save and
 		// make tracking impossible to disable for embedded models; skipping
 		// it keeps the documented contract that only explicitly set values
-		// are written.
-		if fieldSchema.tagName == gsmtypes.LastModified &&
+		// are written. SerializerType fields are exempt: for them the zero
+		// value's serialization is the type's own contract (it may encode a
+		// meaningful sentinel), so the value must reach the serializer.
+		if !fieldSchema.isSerializer &&
+			fieldSchema.tagName == gsmtypes.LastModified &&
 			fieldSchema.tagName != schema.lastModifiedProperty &&
 			fieldValue.IsZero() {
 			continue
