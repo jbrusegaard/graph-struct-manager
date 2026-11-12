@@ -2,6 +2,8 @@ module github.com/jbrusegaard/graph-struct-manager
 
 go 1.27
 
+toolchain go1.27.4
+
 require (
 	github.com/apache/tinkerpop/gremlin-go/v3 v3.8.1
 	github.com/google/uuid v1.6.0
